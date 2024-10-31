@@ -30,10 +30,10 @@ module ldpc_decoder
      type(TEdgeList), allocatable :: v_to_c(:)
    contains
      ! final :: destructor
-     procedure, public :: print => print_decoder
-     procedure, public :: check_llr
-     procedure, public :: word_to_synd
-     procedure, public :: decode
+     procedure, pass(this), public :: print => print_decoder
+     procedure, pass(this), public :: check_llr
+     procedure, pass(this), public :: word_to_synd
+     procedure, pass(this), public :: decode
   end type TDecoder
 
   interface TDecoder

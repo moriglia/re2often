@@ -1,6 +1,6 @@
 F_SRC_ROOT = src/fortran
 F_SRC_LDPC = $(F_SRC_ROOT)/ldpc
-
+F_TEST     = test/fortran
 BUILD = build
 O_FORTRAN = $(BUILD)/fortran
 O_LDPC    = $(O_FORTRAN)/ldpc
@@ -9,9 +9,11 @@ O_MODS    = $(O_FORTRAN)/mods
 OPTIMIZE ?= -O3
 
 
-.PHONY: all test
+.PHONY: all testldpc testalpha test libraries
 
-all: lib/libldpc.a
+all: libraries test
+libraries: lib/libldpc.a lib/libalpha.a
+test: testldpc testalpha
 
 
 # Missing directory
@@ -30,8 +32,29 @@ LDPC_MODS = ldpc_edge_list ldpc_decoder
 LDPC_OBJS = $(patsubst %, $(O_LDPC)/%.o, $(LDPC_MODS))
 lib/libldpc.a : $(LDPC_OBJS)
 
+TEST_LDPC = $(patsubst %, $(F_TEST)/test_ldpc_%, decoder_construction edge_list)
+$(TEST_LDPC): lib/libldpc.a
+testldpc: $(TEST_LDPC)
 
-test: test/fortran/test_ldpc_decoder_construction test/fortran/test_ldpc_edge_list
+
+
+# Alphabet library
+O_ALPHA     = $(O_FORTRAN)/alpha
+F_SRC_ALPHA = $(F_SRC_ROOT)/alpha
+$(O_ALPHA)/%.o : $(F_SRC_ALPHA)/%.f90
+	@mkdir -p $(@D) $(O_MODS)
+	gfortran $(OPTIMIZE) -c $(F_SRC_ALPHA)/$(*F).f90 -J$(O_MODS) -I$(O_MODS) -o $@
+
+ALPHA_MODS = alpha_pam
+ALPHA_OBJS = $(patsubst %, $(O_ALPHA)/%.o, $(ALPHA_MODS))
+lib/libalpha.a: $(ALPHA_OBJS)
+
+TEST_ALPHA = $(patsubst %, $(F_TEST)/test_alpha_%, pam)
+$(TEST_ALPHA) : lib/libalpha.a
+testalpha: $(TEST_ALPHA)
+
+
+
 
 
 # Generic library rule
@@ -42,7 +65,7 @@ lib/lib%.a :
 
 # Generic executable
 %: %.f90
-	gfortran $< -o $@ -lldpc -Llib -I$(O_MODS)
+	gfortran $< -o $@ -lldpc -lalpha -Llib -I$(O_MODS)
 
 
 clean:

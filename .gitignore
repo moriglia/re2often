@@ -1,2 +1,5 @@
 build/
 lib/
+
+# Ignore files without extension within the test directory
+test/**/[^\.]*
