@@ -8,11 +8,14 @@ O_MODS    = $(O_FORTRAN)/mods
 
 OPTIMIZE ?= -O3
 
+STDLIB = $(HOME)/.local/lib
+STDMOD = $(HOME)/.local/include/fortran_stdlib/GNU-11.4.0
+
 
 .PHONY: all testldpc testalpha test libraries
 
 all: libraries test
-libraries: lib/libldpc.a lib/libalpha.a
+libraries: lib/libldpc.a lib/libalpha.a lib/libsimtools.a
 test: testldpc testalpha
 
 
@@ -53,6 +56,19 @@ TEST_ALPHA = $(patsubst %, $(F_TEST)/test_alpha_%, pam)
 $(TEST_ALPHA) : lib/libalpha.a
 testalpha: $(TEST_ALPHA)
 
+
+# Simtools library
+O_SIMTOOLS     = $(O_FORTRAN)/simtools
+F_SRC_SIMTOOLS = $(F_SRC_ROOT)/simtools
+$(O_SIMTOOLS)/%.o : $(F_SRC_SIMTOOLS)/%.f90
+	@mkdir -p $(@D) $(O_MODS)
+	gfortran $(OPTIMIZE) -c $(F_SRC_SIMTOOLS)/$(*F).f90 -J$(O_MODS) -I$(O_MODS) \
+		-L$(STDLIB) -I$(STDMOD) -lfortran_stdlib \
+		-fcoarray=lib -lopenmpi -o $@
+
+SIMTOOLS_MODS = sim_direct_channel
+SIMTOOLS_OBJS = $(patsubst %, $(O_SIMTOOLS)/%.o, $(SIMTOOLS_MODS))
+lib/libsimtools.a : $(SIMTOOLS_OBJS)
 
 
 
