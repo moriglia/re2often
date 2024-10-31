@@ -26,7 +26,7 @@ contains
 
   function TAlphaPAMConstructor(B, probabilities, step) result (this)
     integer, intent(in) :: B
-    real(wp), intent(in) :: probabilities(0:ishft(1,B)-1)
+    real(wp), intent(in), optional :: probabilities(0:ishft(1,B)-1)
     real(wp), intent(in), optional :: step
     type(TAlphaPAM) :: this
 
@@ -42,18 +42,22 @@ contains
     else
        this%step = step
     end if
-    
+
+    allocate(this%probabilities(0:M-1))
+    if (present(probabilities)) then
+       this%probabilities = probabilities
+    else
+       this%probabilities = 1.0_wp/real(M, wp)
+    end if
+
     allocate(this%constellation(0:M-1))
     ! step*(real(((M_half-1)*M_half)/2 + ((M_half-1)*M_half*(M-1))/6, wp) + 0.25_wp)
     base = real(1-M, wp)*step*0.5_wp
     this%variance = 0.0_wp
     do i=0, M - 1
        this%constellation(i) = base + real(i, wp)*this%step
-       this%variance = this%variance + probabilities(i) * this%constellation(i)**2
+       this%variance = this%variance + this%probabilities(i) * this%constellation(i)**2
     end do
-
-    allocate(this%probabilities(0:M-1))
-    this%probabilities = probabilities
 
     allocate(this%symbol_to_bit_map(0:M-1,0:B-1))
     do i = 1, M
