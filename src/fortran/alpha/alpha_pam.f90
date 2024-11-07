@@ -67,7 +67,7 @@ contains
 
     allocate(this%constellation(0:M-1))
     ! step*(real(((M_half-1)*M_half)/2 + ((M_half-1)*M_half*(M-1))/6, wp) + 0.25_wp)
-    base = real(1-M, wp)*step*0.5_wp
+    base = real(1-M, wp)*this%step*0.5_wp
     this%variance = 0.0_wp
     do i=0, M - 1
        this%constellation(i) = base + real(i, wp)*this%step
@@ -75,8 +75,8 @@ contains
     end do
 
     allocate(this%symbol_to_bit_map(0:M-1,0:B-1))
-    do i = 1, M
-       this%symbol_to_bit_map(i, :) = this%symbol_to_grey(i-1)
+    do i = 0, M-1
+       this%symbol_to_bit_map(i, :) = this%symbol_to_grey(i)
     end do
   end function TAlphaPAMConstructor
 

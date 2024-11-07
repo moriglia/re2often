@@ -37,4 +37,8 @@ program test_alpha_pam
   print *, "Default uniform probability"
   pa = TAlphaPAM(3, step=1.0_wp)
   print *, pa%M, pa%step, pa%variance, pa%probabilities
+
+  print *, "All default but bps"
+  pa = TAlphaPAM(4)
+  print *, pa%M, pa%step, pa%variance, pa%probabilities
 end program test_alpha_pam
