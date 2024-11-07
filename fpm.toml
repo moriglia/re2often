@@ -1,0 +1,30 @@
+name="re2often"
+description="Reverse Reconciliation (Re^2) Softening (2often-ing) fortran functions"
+license="GPL-3.0-or-later"
+author="Marco Origlia"
+copyright="Copyright 2024, Marco Origlia"
+
+
+
+[build]
+auto-executables = false
+auto-examples = false
+auto-tests = false
+link = ["caf_openmpi"]
+
+
+[library]
+source-dir="src/fortran"
+
+
+[[executable]]
+source-dir = "programs"
+main = "direct_reconciliation.f90"
+name = "direct_reconciliation"
+
+
+[dependencies]
+stdlib = { git="https://github.com/fortran-lang/stdlib", branch="stdlib-fpm" }
+FLAP = { git="https://github.com/szaghi/FLAP.git" }
+IO-Fortran-Library = { git="https://github.com/acbbullock/IO-Fortran-Library", branch="main" }
+forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }

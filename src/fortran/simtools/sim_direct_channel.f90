@@ -18,21 +18,26 @@ module sim_direct_channel
   use ldpc_decoder, only: TDecoder
   use alpha_pam, only: TAlphaPAM
   use stdlib_stats_distribution_normal, only: rvs_normal
+  use forbear, only: bar_object
   implicit none
+
+  public :: simulate_pam, y_to_llr_grey, y_to_llr_grey_array, word_llr_errors
 
 contains
   
-  subroutine simulate_pam (snrdb_array, bps, &
+  subroutine simulate_pam (snrdb_array, Nsnr, bps, &
        min_ferr, max_loops, min_loops, &
-       e_to_v, e_to_c, ldpc_iterations, &
+       e_to_v, e_to_c, Ne, ldpc_iterations, &
        ber, fer) bind (C)
-    real(wp), intent(in) :: snrdb_array(:)
+    integer(ki), intent(in)  :: Nsnr
+    real(wp), intent(in)     :: snrdb_array(Nsnr)
     integer(ki), intent(in)  :: bps, min_ferr, max_loops, min_loops
-    integer(ki), intent(in)  :: e_to_v(:)
-    integer(ki), intent(in)  :: e_to_c(size(e_to_v))
+    integer(ki), intent(in)  :: Ne
+    integer(ki), intent(in)  :: e_to_v(Ne)
+    integer(ki), intent(in)  :: e_to_c(Ne)
     integer(ki), intent(in)  :: ldpc_iterations
-    real(wp), intent(out)    :: ber(size(snrdb_array))
-    real(wp), intent(out)    :: fer(size(snrdb_array))
+    real(wp), intent(out)    :: ber(Nsnr)
+    real(wp), intent(out)    :: fer(Nsnr)
 
     type(TDecoder) :: decoder
     type(TAlphaPAM) :: alphabet
@@ -55,8 +60,11 @@ contains
     integer, allocatable :: b_error_count(:)[:]
     integer, allocatable :: f_error_count(:)[:]
     integer, allocatable :: f_count(:)[:]
+
+    type(bar_object) :: progress_bar
     
-    decoder = TDecoder(size(e_to_v), e_to_v, e_to_c)
+    
+    decoder = TDecoder(Ne, e_to_v, e_to_c)
     alphabet = TAlphaPAM(bps)
 
     K = decoder%vnum - decoder%cnum
@@ -69,23 +77,30 @@ contains
     allocate(llr_updated(decoder%vnum))
 
 
-    call random_init(.false., .true.)
+    ! call random_init(.false., .true.)
     call random_seed(get=seed)
-    print *, "Original seed: ", seed
+    call sleep(this_image())
     call system_clock(time_seed)
-    print *, "Time seed: ", time_seed, "their XOR: ", ieor(time_seed, seed)
     call random_seed(put=[ieor(time_seed, seed), this_image()])
 
-    allocate(b_error_count(size(snrdb_array))[*])
-    allocate(f_error_count(size(snrdb_array))[*])
-    allocate(f_count(size(snrdb_array))[*])
-    
+    allocate(b_error_count(Nsnr)[*])
+    allocate(f_error_count(Nsnr)[*])
+    allocate(f_count(Nsnr)[*])
+
     b_error_count(:) = 0
     f_error_count(:) = 0
     f_count(:) = 0
+
     sync all
 
-    snr_loop : do i_snr = 1 , size(snrdb_array)
+    if (this_image() == 1) then
+       call progress_bar%initialize(&
+            filled_char_string='+', prefix_string='SNR points progress |',&
+            suffix_string='| ', add_progress_percent=.true.)
+       call progress_bar%start
+    end if
+    
+    snr_loop : do i_snr = 1 , Nsnr
        N0 = 10.0_wp**(-snrdb_array(i_snr)/10.0_wp) * alphabet%variance
        N0_half = 0.5_wp * N0
        
@@ -99,7 +114,7 @@ contains
 
           n_ldpc_it = ldpc_iterations
           call decoder%decode(llr, llr_updated, synd, n_ldpc_it)
-
+          
           new_errors = word_llr_errors(word(:K), llr_updated(:K))
 
           critical
@@ -115,6 +130,9 @@ contains
              exit frame_loop
           end if
        end do frame_loop
+       if (this_image()==1) then
+          call progress_bar%update(current=real(i_snr, 8)/real(Nsnr, 8))
+       end if
     end do snr_loop
 
 
@@ -128,7 +146,7 @@ contains
   end subroutine simulate_pam
 
 
-  function y_to_llr_grey(N0, pa, y) result (llr)
+  pure function y_to_llr_grey(N0, pa, y) result (llr)
     real(wp), intent(in) :: N0 ! Note that this is 2\sigma^2
     type(TAlphaPAM), intent(in)  :: pa
     real(wp), intent(in) :: y
@@ -159,7 +177,7 @@ contains
   end function y_to_llr_grey
 
 
-  function y_to_llr_grey_array(N0, pa, y) result(llr)
+  pure function y_to_llr_grey_array(N0, pa, y) result(llr)
     real(wp), intent(in) :: N0 ! Note that this is 2\sigma^2
     type(TAlphaPAM), intent(in)  :: pa
     real(wp), intent(in) :: y(0:)
@@ -173,7 +191,7 @@ contains
   end function y_to_llr_grey_array
 
 
-  function word_llr_errors(word, llr) result (errors)
+  pure function word_llr_errors(word, llr) result (errors)
     logical, intent(in) :: word(:)
     real(wp), intent(in) :: llr(size(word))
     integer :: errors
@@ -181,7 +199,7 @@ contains
     integer :: i
     errors = 0
     do i = 1, size(word)
-       if (xor(word(i), llr(i) < 0.0_wp)) then
+       if (word(i) .neqv. (llr(i) < 0.0_wp)) then
           errors = errors + 1
        end if
     end do
