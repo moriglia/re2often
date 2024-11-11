@@ -150,10 +150,10 @@ contains
     real(wp), intent(in) :: N0 ! Note that this is 2\sigma^2
     type(TAlphaPAM), intent(in)  :: pa
     real(wp), intent(in) :: y
-    real(wp) :: llr(pa%B)
-    real(wp) :: D(pa%B)
+    real(wp) :: llr(0:pa%B-1)
+    real(wp) :: D(0:pa%B-1)
 
-    integer :: M, i, b, x
+    integer :: M, i, b
     real(wp) :: addendum
     M = ishft(1, pa%B)
 
@@ -161,15 +161,13 @@ contains
     D(:)   = 0.0_wp
     
     do i = 0, M-1
-       x = i
-       addendum = exp(-((y-pa%constellation(i))**2.0_wp)/N0)
-       do b = 1, pa%B
-          if (iand(x*(x+1), b'11') == 0) then
-             llr(b) = llr(b) + addendum
-          else
+       addendum = pa%probabilities(i) * exp(-((y-pa%constellation(i))**2.0_wp)/N0)
+       do b = 0, pa%B - 1
+          if (pa%symbol_to_bit_map(i,b)) then
              D(b) = D(b) + addendum
+          else
+             llr(b) = llr(b) + addendum
           end if
-          x = ishft(x, -1)
        end do
     end do
 

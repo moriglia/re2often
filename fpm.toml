@@ -23,8 +23,34 @@ main = "direct_reconciliation.f90"
 name = "direct_reconciliation"
 
 
+# [[test]]
+# name = "ldpc"
+# source-dir = "test/fortran/ldpc"
+
+
+[[test]]
+name = "alpha"
+source-dir = "test/fortran/alpha"
+main = "main.f90"
+
+[[test]]
+name = "ldpc"
+source-dir = "test/fortran/ldpc"
+main = "main.f90"
+	   
+[[test]]
+name = "simtools"
+source-dir = "test/fortran/simtools"
+main = "main.f90"
+
+
 [dependencies]
 stdlib = { git="https://github.com/fortran-lang/stdlib", branch="stdlib-fpm" }
 FLAP = { git="https://github.com/szaghi/FLAP.git" }
 IO-Fortran-Library = { git="https://github.com/acbbullock/IO-Fortran-Library", branch="main" }
 forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
+
+
+
+[dev-dependencies]
+test-drive = { git="https://github.com/fortran-lang/test-drive.git", tag="v0.5.0" }
