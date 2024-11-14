@@ -352,10 +352,9 @@ contains
 
        if (this%check_llr(llr_updated, synd)) then
           ! Early stop if the current llr already satisfies the syndrome
+          N_iterations = it
           exit decoding_loop
        end if
     end do decoding_loop
-
-    N_iterations = it
   end subroutine decode
 end module ldpc_decoder
