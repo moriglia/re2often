@@ -43,6 +43,11 @@ name = "simtools"
 source-dir = "test/fortran/simtools"
 main = "main.f90"
 
+[[test]]
+name = "noisemapper"
+source-dir = "test/fortran/noisemapper"
+main = "main.f90"
+
 
 [dependencies]
 stdlib = { git="https://github.com/fortran-lang/stdlib", branch="stdlib-fpm" }
