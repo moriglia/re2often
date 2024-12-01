@@ -1,5 +1,5 @@
 module test_suite_noise_mapper
-  use noise_mapper, only: TNoiseMapper
+  use noise_mapper, only: TNoiseMapper, binsearch, interpolate
   use iso_c_binding, only: wp=>c_double
   use testdrive, only : new_unittest, unittest_type, error_type, check, test_failed
   implicit none
@@ -15,14 +15,11 @@ contains
     type(unittest_type), allocatable, intent(out) :: testsuite(:)
 
     testsuite = [&
-         ! new_unittest("only bps", test_bps_only),&
-         ! new_unittest("bps + probabilities", test_bps_probabilities),&
-         ! new_unittest("bps + step", test_bps_step),&
-         ! new_unittest("bps + step + probabilities", test_bps_step_probabilities),&
-         ! new_unittest("symbol_to_bit_map", test_symbol_to_bit_map),&
-         ! new_unittest("symbol_to_grey", test_symbol_to_grey),&
-         ! new_unittest("symbol_to_grey_array", test_symbol_to_grey_array),&
-         new_unittest("construction without optionals", test_construction_without_optionals)&
+         new_unittest("construction without optionals", test_construction_without_optionals),&
+         new_unittest("binsearch", test_binsearch),&
+         new_unittest("hard decision", test_hard_decide_index),&
+         new_unittest("interpolation", test_interpolate),&
+         new_unittest("soft metric generation and usage", test_soft_metric)&
          ]
   end subroutine collect_suite
   
@@ -43,7 +40,8 @@ contains
     call check(error, nm%step, 2.0_wp, thr=0.001_wp)
     if (allocated(error)) return
     do i = 0, 15
-       call check(error, nm%constellation(i), real(real(-15, wp) + real(i, wp)*2.0_wp, wp), thr=0.001_wp)
+       call check(error, nm%constellation(i), &
+            real(real(-15, wp) + real(i, wp)*2.0_wp, wp), thr=0.001_wp)
        if (allocated(error)) return
        call check(error, nm%probabilities(i), 0.0625_wp, thr=0.000001_wp)
        if (allocated(error)) return
@@ -61,181 +59,95 @@ contains
   end subroutine test_construction_without_optionals
 
 
+  subroutine test_binsearch(error)
+    type(error_type), allocatable, intent(out) :: error
 
-  ! subroutine test_bps_probabilities(error)
-  !   type(error_type), allocatable, intent(out) :: error
+    call check(error, binsearch(real([3,4,5,6], wp), 0._wp) .eq. 0)
+    if (allocated(error)) return
 
-  !   integer :: i
-  !   type(TAlphaPAM) :: pa
-  !   pa = TAlphaPAM(2, [0.1_wp, 0.4_wp, 0.4_wp, 0.1_wp])
+    call check(error, binsearch(real([3,4,5,6], wp), 6.4_wp) .eq. 3)
+    if (allocated(error)) return
 
-  !   call check(error, pa%M, 4)
-  !   if (allocated(error)) return
+    call check(error, binsearch(real([3,4,5,6], wp), 4.2_wp) .eq. 1)
+  end subroutine test_binsearch
 
-  !   call check(error, pa%B, 2)
-  !   if (allocated(error)) return
-  !   call check(error, pa%step, 2.0_wp, thr=0.001_wp)
-  !   if (allocated(error)) return
-  !   do i = 0, 3
-  !      call check(error, pa%constellation(i), real(real(-3, wp) + real(i, wp)*2.0_wp, wp), thr=0.001_wp)
-  !      if (allocated(error)) return
-  !   end do
 
-  !   call check(error, pa%probabilities(0), 0.1_wp, thr=0.000001_wp)
-  !   if (allocated(error)) return
-  !   call check(error, pa%probabilities(1), 0.4_wp, thr=0.000001_wp)
-  !   if (allocated(error)) return
-  !   call check(error, pa%probabilities(2), 0.4_wp, thr=0.000001_wp)
-  !   if (allocated(error)) return
-  !   call check(error, pa%probabilities(3), 0.1_wp, thr=0.000001_wp)
-  !   if (allocated(error)) return
+  subroutine test_hard_decide_index(error)
+    type(error_type), allocatable, intent(out) :: error
+
+    integer :: i
+    type(TNoiseMapper) :: nm
+    nm = TNoiseMapper(B=3, sigma=0.5_wp, step=2.0_wp)
+
+    call check(error, nm%hard_decide_index(-6.4_wp) .eq. 0)
+    if (allocated(error)) return
+
+    call check(error, all(nm%hard_decide_index([-6.4_wp, 5.9_wp, 7.2_wp, 0.1_wp, -5.9_wp]) .eq. &
+         [0, 6, 7, 4, 1]))
+    if (allocated(error)) return
+  end subroutine test_hard_decide_index
+
+
+  subroutine test_interpolate(error)
+    type(error_type), allocatable, intent(out) :: error
+    integer :: i
+
+    call check(error, &
+         interpolate(&
+         real([0,1,2,3,4], wp),&
+         real([.2, .5, .6, .67, .9], wp), -1.4_wp), &
+         0.2_wp, &
+         thr=0.001_wp)
+    if (allocated(error)) return
+
+    call check(error, &
+         interpolate(&
+         real([0,1,2,3,4], wp),&
+         real([.2, .5, .6, .67, .9], wp), 0.9_wp), &
+         0.2_wp, &
+         thr=0.001_wp)
+    if (allocated(error)) return
+
+    call check(error, &
+         interpolate(&
+         real([0,1,2,3,4], wp),&
+         real([.2, .5, .6, .67, .9], wp), 5.2_wp), &
+         0.9_wp, &
+         thr=0.001_wp)
+    if (allocated(error)) return
+
+    call check(error, &
+         interpolate(&
+         real([0,1,2,3,4], wp),&
+         real([.2, .5, .6, .67, .9], wp), 2.4_wp), &
+         0.6_wp, &
+         thr=0.001_wp)
+  end subroutine test_interpolate
+
+
+  subroutine test_soft_metric(error)
+    type(error_type), allocatable, intent(out) :: error
+
+    integer :: i
+    real(wp) :: y, nhat
+    type(TNoiseMapper) :: nm
+    nm = TNoiseMapper(B=2, sigma=0.5_wp, step=2.0_wp)
+
+    y = -3.2_wp
+    i = nm%hard_decide_index(y)
+    nhat = nm%generate_soft_metric(y, i)
+    call check(error, nm%reconstruct_sample_from_metric(nhat, i), y, thr=0.002_wp)
+    if (allocated(error)) return
     
-  !   call check(error, pa%variance, 2.6_wp, thr=0.001_wp)
-  !   if (allocated(error)) return
-  ! end subroutine test_bps_probabilities
-
-
-  ! subroutine test_bps_step(error)
-  !   type(error_type), allocatable, intent(out) :: error
-
-  !   integer :: i
-  !   type(TAlphaPAM) :: pa
-  !   pa = TAlphaPAM(2, step=1.0_wp)
-
-  !   call check(error, pa%M, 4)
-  !   if (allocated(error)) return
-
-  !   call check(error, pa%B, 2)
-  !   if (allocated(error)) return
-  !   call check(error, pa%step, 1.0_wp, thr=0.001_wp)
-  !   if (allocated(error)) return
-  !   do i = 0, 3
-  !      call check(error, pa%constellation(i), real(real(-3, wp)/2.0_wp + real(i, wp), wp), thr=0.001_wp)
-  !      if (allocated(error)) return
-
-  !      call check(error, pa%probabilities(i), 0.25_wp, thr=0.000001_wp)
-  !      if (allocated(error)) return
-  !   end do
-
+    y = 3.2_wp
+    i = nm%hard_decide_index(y)
+    nhat = nm%generate_soft_metric(y, i)
+    call check(error, nm%reconstruct_sample_from_metric(nhat, i), y, thr=0.002_wp)
+    if (allocated(error)) return
     
-  !   call check(error, pa%variance, 1.25_wp, thr=0.001_wp)
-  !   if (allocated(error)) return
-  ! end subroutine
-
-  ! subroutine test_bps_step_probabilities(error)
-  !   type(error_type), allocatable, intent(out) :: error
-
-  !   integer :: i
-  !   type(TAlphaPAM) :: pa
-  !   pa = TAlphaPAM(2, [0.1_wp, 0.4_wp, 0.4_wp, 0.1_wp], 1.0_wp)
-
-  !   call check(error, pa%M, 4)
-  !   if (allocated(error)) return
-
-  !   call check(error, pa%B, 2)
-  !   if (allocated(error)) return
-  !   call check(error, pa%step, 1.0_wp, thr=0.001_wp)
-  !   if (allocated(error)) return
-  !   do i = 0, 3
-  !      call check(error, pa%constellation(i), real(-3, wp)/2.0_wp + real(i, wp), thr=0.001_wp)
-  !      if (allocated(error)) return
-  !   end do
-
-  !   call check(error, pa%probabilities(0), 0.1_wp, thr=0.000001_wp)
-  !   if (allocated(error)) return
-  !   call check(error, pa%probabilities(1), 0.4_wp, thr=0.000001_wp)
-  !   if (allocated(error)) return
-  !   call check(error, pa%probabilities(2), 0.4_wp, thr=0.000001_wp)
-  !   if (allocated(error)) return
-  !   call check(error, pa%probabilities(3), 0.1_wp, thr=0.000001_wp)
-  !   if (allocated(error)) return
-    
-  !   call check(error, pa%variance, 0.65_wp, thr=0.001_wp)
-  !   if (allocated(error)) return
-  ! end subroutine test_bps_step_probabilities
-
-
-  ! subroutine test_symbol_to_bit_map(error)
-  !   type(error_type), allocatable, intent(out) :: error
-  !   logical :: table(0:7, 0:2)
-  !   integer :: i, j
-  !   type(TAlphaPAM) :: pa
-  !   pa = TAlphaPAM(3)
-
-    
-
-  !   table(:3,2) = .false.
-  !   table(4:,2) = .true.
-
-  !   table(:, 1) = [.false., .false., .true., .true.,.true., .true., .false., .false.]
-  !   table(:, 0) = [.false., .true., .true., .false.,.false., .true., .true., .false.]
-
-
-  !   do i=0, pa%M-1
-  !      do j = 0, pa%B-1
-  !         call check(error, pa%symbol_to_bit_map(i, j) .eqv. table(i,j))
-  !         if (allocated(error)) return
-  !      end do
-  !   end do
-  ! end subroutine test_symbol_to_bit_map
-
-
-  ! subroutine test_symbol_to_grey(error)
-  !   type(error_type), allocatable, intent(out) :: error
-  !   logical :: table(0:7, 0:2)
-  !   integer :: i
-  !   type(TAlphaPAM) :: pa
-  !   pa = TAlphaPAM(3)
-
-  !   table(:3,2) = .false.
-  !   table(4:,2) = .true.
-
-  !   table(:, 1) = [.false., .false., .true., .true.,.true., .true., .false., .false.]
-  !   table(:, 0) = [.false., .true., .true., .false.,.false., .true., .true., .false.]
-
-
-  !   do i=0, pa%M-1
-  !      call check(error, all(pa%symbol_to_grey(i) .eqv. table(i,:)))
-  !      if (allocated(error)) return
-  !   end do
-  ! end subroutine test_symbol_to_grey
-
-
-  ! subroutine test_symbol_to_grey_array(error)
-  !   type(error_type), allocatable, intent(out) :: error
-  !   integer :: i
-  !   integer :: symbols(3)
-  !   type(TAlphaPAM) :: pa
-  !   pa = TAlphaPAM(3)
-
-  !   symbols = [0,1,7]
-
-  !   do i=0, pa%M-1
-  !      call check(error, all(&
-  !           pa%symbol_to_grey_array(symbols) .eqv. &
-  !           [.false., .false., .false., .true., .false., .false., .false., .false., .true.]))
-  !      if (allocated(error)) then
-  !         print*, pa%symbol_to_grey_array(symbols)
-  !         return
-  !      end if
-       
-  !   end do
-  ! end subroutine test_symbol_to_grey_array
-
-
-  ! subroutine test_symbol_index_to_real(error)
-  !   type(error_type), allocatable, intent(out) :: error
-  !   integer :: i
-  !   integer :: symbols(8)
-  !   type(TAlphaPAM) :: pa
-  !   pa = TAlphaPAM(3)
-
-  !   symbols = [0,1,3,4,2,6,7,5]
-
-  !   call check(error, all(abs(&
-  !        pa%symbol_index_to_real(symbols) - &
-  !        [-7.0_wp, -5.0_wp, -1.0_wp, 1.0_wp, -3.0_wp, 5.0_wp, 7.0_wp, 3.0_wp]) < 0.001_wp))
-
-  ! end subroutine test_symbol_index_to_real
-  
+    y = 1.1_wp
+    i = nm%hard_decide_index(y)
+    nhat = nm%generate_soft_metric(y, i)
+    call check(error, nm%reconstruct_sample_from_metric(nhat, i), y, thr=0.002_wp)
+  end subroutine test_soft_metric
 end module test_suite_noise_mapper

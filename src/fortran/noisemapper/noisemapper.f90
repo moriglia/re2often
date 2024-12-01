@@ -20,7 +20,7 @@ module noise_mapper
   use stdlib_kinds, only: dp
   implicit none
 
-  public :: TNoiseMapper
+  public :: TNoiseMapper, binsearch, interpolate
 
   type, public, extends(TAlphaPAM) :: TNoiseMapper
      ! noise parameters
@@ -42,9 +42,19 @@ module noise_mapper
    contains
      procedure, pass(this), public :: set_y_thresholds
 
-     procedure, pass, public :: y_to_cdf
-     procedure, pass, public :: y_to_cdf_array
+     procedure, pass, private :: y_to_cdf
+     procedure, pass, private:: y_to_cdf_array
      generic, public :: CDF_Y => y_to_cdf, y_to_cdf_array
+
+     procedure, pass, public :: hard_decide_index
+
+     procedure, pass, public :: generate_soft_metric
+     procedure, pass, public :: reconstruct_sample_from_metric
+
+     procedure, pass, private :: demap_metric_to_lappr_single_transmission
+     procedure, pass, private :: demap_metric_to_lappr_array
+     generic, public :: demap_metric_to_lappr => &
+          demap_metric_to_lappr_single_transmission, demap_metric_to_lappr_array
   end type TNoiseMapper
 
   interface TNoiseMapper
@@ -92,7 +102,7 @@ contains
 
 
     allocate(this%y_thresholds(1:this%M-1))
-    allocate(this%F_Y_thresholds(1:this%M-1))
+    allocate(this%F_Y_thresholds(0:this%M))
     allocate(this%delta_F_Y(0:this%M-1))
     call this%set_y_thresholds([(real(i+1-ishft(this%M, -1), wp)*this%step, i = 0, this%M-2)])
 
@@ -128,11 +138,14 @@ contains
     integer :: i
     
     this%y_thresholds = y_thresholds
-    this%F_Y_thresholds = this%CDF_Y(y_thresholds)
+    this%F_Y_thresholds(1:this%M-1) = this%CDF_Y(y_thresholds)
 
-    this%delta_F_Y(1:this%M-2) = this%F_Y_thresholds(2:this%M-1) - this%F_Y_thresholds(1:this%M-2)
+    this%F_Y_thresholds(0) = 0.0_wp
+    this%F_Y_thresholds(this%M) = 1.0_wp
+    
+    this%delta_F_Y(1:this%M-1) = this%F_Y_thresholds(2:this%M) - this%F_Y_thresholds(1:this%M-1)
     this%delta_F_Y(0) = this%F_Y_thresholds(1)
-    this%delta_F_Y(this%M-1) = 1.0_wp - this%F_Y_thresholds(this%M-1)
+    ! this%delta_F_Y(this%M-1) = 1.0_wp - this%F_Y_thresholds(this%M-1)
   end subroutine set_y_thresholds
 
 
@@ -160,5 +173,152 @@ contains
        F(i) = this%CDF_Y(y(i))
     end do
   end function y_to_cdf_array
+
+
+  pure function binsearch(domain, val) result(ind)
+    real(wp), intent(in) :: domain(0:)
+    real(wp), intent(in) :: val
+    integer :: ind
+
+    integer :: upper, lower
+    upper = size(domain) ! exclusive upper bound
+    lower = 0 ! inclusive lower bound
+
+    if (domain(upper-1) <= val) then
+       ind = upper - 1
+       return
+    end if
+
+    if (domain(0) > val) then
+       ind = 0
+       return
+    end if
+    
+    ind = ishft(upper, -1)
+
+    do while (upper > lower+1)
+       if (val < domain(ind)) then
+          upper = ind
+       else
+          lower = ind
+       end if
+       ind = (upper + lower)/2
+    end do
+  end function binsearch
+
+
+  pure function interpolate(domain, codomain, d_val) result(c_val)
+    real(wp), intent(in) :: domain(0:)
+    real(wp), intent(in) :: codomain(0:)
+    real(wp), intent(in) :: d_val
+
+    real(wp) :: c_val
+
+    c_val = codomain(binsearch(domain, d_val))
+    ! Possible improvement: linear interpolation codomain(i) and (i+1)
+  end function interpolate
+
+
+  elemental function hard_decide_index(this, y) result (x_ind)
+    class(TNoiseMapper), intent(in) :: this
+    real(wp), intent(in) :: y
+    integer :: x_ind
+
+    if (y < this%y_thresholds(1)) then
+       x_ind = 0
+       return
+    end if
+    
+    x_ind = binsearch(this%y_thresholds(:), y) + 1
+  end function hard_decide_index
+
+
+  function generate_soft_metric(this, y, i) result (nhat)
+    class(TNoiseMapper), intent(in) :: this
+    real(wp), intent(in) :: y
+    integer, intent(in)  :: i
+
+    real(wp) :: nhat
+
+    if (this%monotonicity_config(i)) then
+       nhat = (this%F_Y_thresholds(i+1) -  this%CDF_Y(y))/this%delta_F_Y(i)
+    else
+       nhat = (this%CDF_Y(y) - this%F_Y_thresholds(i))/this%delta_F_Y(i)
+    end if
+  end function generate_soft_metric
+    
   
+  function reconstruct_sample_from_metric(this, nhat, i) result(y)
+    class(TNoiseMapper), intent(in) :: this
+    real(wp), intent(in) :: nhat
+    integer, intent(in)  :: i
+
+    real(wp) :: y
+
+    if (this%monotonicity_config(i)) then
+       y = interpolate(this%F_Y_range, this%y_range, &
+            this%F_Y_thresholds(i+1) -  nhat*this%delta_F_Y(i))
+    else
+       y = interpolate(this%F_Y_range, this%y_range, &
+            this%F_Y_thresholds(i) +  nhat*this%delta_F_Y(i))
+    end if
+  end function reconstruct_sample_from_metric
+
+
+  function demap_metric_to_lappr_single_transmission(this, nhat, j) result (lappr)
+    class(TNoiseMapper) :: this
+    integer, intent(in) :: j      ! transmitted symbol
+    real(wp), intent(in):: nhat   ! softening metric
+
+    real(wp) :: lappr(0:this%B-1)
+
+    real(wp) :: N(0:this%B-1)
+    real(wp) :: D(0:this%B-1)
+
+    integer :: l ! bit index within symbol
+    integer :: i ! possible received symbol
+    integer :: k ! possible transmitted symbols
+
+    real(wp) :: a_j, y_i, addendum, twoSigmaSquare
+
+    N(:) = 0.0_wp
+    D(:) = 0.0_wp
+
+    a_j = this%constellation(j)
+    twoSigmaSquare = this%sigmaSquare * 2.0_wp
+    do i = 0, this%M
+       y_i = this%reconstruct_sample_from_metric(nhat, i)
+       addendum = 0.0_wp
+       do k = 0, this%M-1
+          addendum = addendum + this%probabilities(k) * &
+               exp( (this%constellation(k) - a_j) * &
+               (2*y_i - this%constellation(k) - a_j) / twoSigmaSquare)
+       end do
+
+       do l = 0, this%B-1
+          if (this%symbol_to_bit_map(i, l)) then
+             D(l) = D(l) + addendum
+          else
+             N(l) = N(l) + addendum
+          end if
+       end do
+    end do
+
+    lappr = log(N) - log(D)
+  end function demap_metric_to_lappr_single_transmission
+
+
+  function demap_metric_to_lappr_array(this, nhat, j) result (lappr)
+    class(TNoiseMapper) :: this
+    integer, intent(in) :: j(0:)     ! transmitted symbol
+    real(wp), intent(in):: nhat(0:size(j)-1)   ! softening metric
+
+    real(wp) :: lappr(0:size(j)*this%B-1)
+
+    integer :: k
+
+    do k = 0, size(j)-1
+       lappr( k*this%B : (k+1)*this%B - 1 ) = this%demap_metric_to_lappr_single_transmission(nhat(k), j(k))
+    end do
+  end function demap_metric_to_lappr_array
 end module noise_mapper
