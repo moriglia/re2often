@@ -13,19 +13,20 @@
 
 !    You should have received a copy of the GNU General Public License
 !    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-module sim_direct_channel
+module sim_rrs
   use iso_c_binding, only: wp => c_double, ki => c_int, kl => c_bool
   use ldpc_decoder, only: TDecoder
   use alpha_pam, only: TAlphaPAM
+  use noise_mapper, only: TNoiseMapper
   use stdlib_stats_distribution_normal, only: rvs_normal
-  use forbear, only: bar_object
+  ! use forbear, only: bar_object
   implicit none
 
-  public :: simulate_pam, y_to_llr_grey, y_to_llr_grey_array, word_llr_errors
+  public :: simulate_reverse_pam
 
 contains
   
-  subroutine simulate_pam (snrdb_array, Nsnr, bps, &
+  subroutine simulate_reverse_pam (snrdb_array, Nsnr, bps, &
        min_ferr, max_loops, min_loops, &
        e_to_v, e_to_c, Ne, ldpc_iterations, &
        ber, fer) bind (C)
@@ -41,6 +42,7 @@ contains
 
     type(TDecoder) :: decoder
     type(TAlphaPAM) :: alphabet
+    type(TNoiseMapper) :: noisemapper
     integer :: time_seed, seed(8)
 
     integer :: i_snr, i_frame
@@ -48,10 +50,14 @@ contains
 
     integer, allocatable :: x(:)
     real(wp), allocatable :: y(:)
+    real(wp), allocatable :: nhat(:)
+    integer, allocatable :: xhat(:)
     logical, allocatable :: word(:)
     logical, allocatable :: synd(:)
-    real(wp), allocatable :: llr(:)
-    real(wp), allocatable :: llr_updated(:)
+    real(wp), allocatable :: lappr(:)
+    real(wp), allocatable :: lappr_updated(:)
+
+    real :: t0, t1, t_mapper, t_decoder, n_frames
 
     real(wp) :: N0, N0_half, sigma
 
@@ -61,7 +67,7 @@ contains
     integer, allocatable :: f_error_count(:)[:]
     integer, allocatable :: f_count(:)[:]
 
-    type(bar_object) :: progress_bar
+    ! type(bar_object) :: progress_bar
     
     
     decoder = TDecoder(Ne, e_to_v, e_to_c)
@@ -71,13 +77,14 @@ contains
     N_symb = decoder%vnum / bps
     allocate(x(N_symb))
     allocate(y(N_symb))
+    allocate(xhat(N_symb))
+    allocate(nhat(N_symb))
     allocate(word(decoder%vnum))
     allocate(synd(decoder%cnum))
-    allocate(llr(decoder%vnum))
-    allocate(llr_updated(decoder%vnum))
+    allocate(lappr(decoder%vnum))
+    allocate(lappr_updated(decoder%vnum))
 
 
-    ! call random_init(.false., .true.)
     call random_seed(get=seed)
     call sleep(this_image())
     call system_clock(time_seed)
@@ -93,17 +100,24 @@ contains
 
     sync all
 
-    if (this_image() == 1) then
-       call progress_bar%initialize(&
-            filled_char_string='+', prefix_string='SNR points progress |',&
-            suffix_string='| ', add_progress_percent=.true.)
-       call progress_bar%start
-    end if
+    ! if (this_image() == 1) then
+    !    call progress_bar%initialize(&
+    !         filled_char_string='+', prefix_string='SNR points progress |',&
+    !         suffix_string='| ', add_progress_percent=.true.)
+    !    call progress_bar%start
+    ! end if
+    noisemapper = TNoiseMapper(B=bps, sigma=1.0_wp)
     
     snr_loop : do i_snr = 1 , Nsnr
        N0 = 10.0_wp**(-snrdb_array(i_snr)/10.0_wp) * alphabet%variance
        N0_half = 0.5_wp * N0
        sigma = sqrt(N0_half)
+
+       call noisemapper%update_noise_sigma(sigma)
+
+       t_mapper = 0.0
+       t_decoder = 0.0
+       n_frames = 1.0
        
        frame_loop : do i_frame = 1, max_loops
           call alphabet%random_symbol(x)
@@ -111,12 +125,20 @@ contains
           synd = decoder%word_to_synd(word)
           
           y = rvs_normal(loc=alphabet%symbol_index_to_real(x), scale=sigma)
-          llr = y_to_llr_grey_array(N0, alphabet, y)
 
-          n_ldpc_it = ldpc_iterations
-          call decoder%decode(llr, llr_updated, synd, n_ldpc_it)
+          call cpu_time(t0)
+          xhat = noisemapper%hard_decide_index(y)
+          nhat = noisemapper%generate_soft_metric(y, xhat)
+          lappr = noisemapper%demap_metric_to_lappr(nhat, x)
+          call cpu_time(t1)
+          t_mapper = t_mapper + t1 - t0
           
-          new_errors = word_llr_errors(word(:K), llr_updated(:K))
+          n_ldpc_it = ldpc_iterations
+          call cpu_time(t0)
+          call decoder%decode(lappr, lappr_updated, synd, n_ldpc_it)
+          call cpu_time(t1)
+          t_decoder = t_decoder + t1 - t0
+          new_errors = word_lappr_errors(word(:K), lappr_updated(:K))
 
           critical
             if (new_errors > 0) then
@@ -130,9 +152,11 @@ contains
                (f_count(i_snr)[1] > min_loops)) then
              exit frame_loop
           end if
+          n_frames = n_frames + 1
        end do frame_loop
-       if (this_image()==1) then
-          call progress_bar%update(current=real(i_snr, 8)/real(Nsnr, 8))
+       if (this_image() == 1) then
+          print '("PROGRESS [", I2,"/",I2,"]", 8x, "t_D=", f7.3, "s", 8x, "t_M=", f7.3, "s")', &
+            i_snr, Nsnr, t_decoder/n_frames, t_mapper/n_frames
        end if
     end do snr_loop
 
@@ -144,65 +168,22 @@ contains
        fer = real(f_error_count, wp)/real(f_count, wp)
     end if
     
-  end subroutine simulate_pam
+  end subroutine simulate_reverse_pam
 
 
-  pure function y_to_llr_grey(N0, pa, y) result (llr)
-    real(wp), intent(in) :: N0 ! Note that this is 2\sigma^2
-    type(TAlphaPAM), intent(in)  :: pa
-    real(wp), intent(in) :: y
-    real(wp) :: llr(0:pa%B-1)
-    real(wp) :: D(0:pa%B-1)
-
-    integer :: M, i, b
-    real(wp) :: addendum
-    M = ishft(1, pa%B)
-
-    llr(:) = 0.0_wp
-    D(:)   = 0.0_wp
-    
-    do i = 0, M-1
-       addendum = pa%probabilities(i) * exp(-((y-pa%constellation(i))**2.0_wp)/N0)
-       do b = 0, pa%B - 1
-          if (pa%symbol_to_bit_map(i,b)) then
-             D(b) = D(b) + addendum
-          else
-             llr(b) = llr(b) + addendum
-          end if
-       end do
-    end do
-
-    llr = log(llr) - log(D)
-  end function y_to_llr_grey
-
-
-  pure function y_to_llr_grey_array(N0, pa, y) result(llr)
-    real(wp), intent(in) :: N0 ! Note that this is 2\sigma^2
-    type(TAlphaPAM), intent(in)  :: pa
-    real(wp), intent(in) :: y(0:)
-    real(wp) :: llr(0:size(y)*pa%B-1)
-
-    integer :: i
-
-    do i = 0, size(y)-1
-       llr(i*pa%B : (i+1)*pa%B-1) = y_to_llr_grey(N0, pa, y(i))
-    end do
-  end function y_to_llr_grey_array
-
-
-  pure function word_llr_errors(word, llr) result (errors)
+  pure function word_lappr_errors(word, lappr) result (errors)
     logical, intent(in) :: word(:)
-    real(wp), intent(in) :: llr(size(word))
+    real(wp), intent(in) :: lappr(size(word))
     integer :: errors
 
     integer :: i
     errors = 0
     do i = 1, size(word)
-       if (word(i) .neqv. (llr(i) < 0.0_wp)) then
+       if (word(i) .neqv. (lappr(i) < 0.0_wp)) then
           errors = errors + 1
        end if
     end do
-  end function word_llr_errors
+  end function word_lappr_errors
 
 
-end module sim_direct_channel
+end module sim_rrs

@@ -9,13 +9,14 @@ O_MODS    = $(O_FORTRAN)/mods
 OPTIMIZE ?= -O3
 
 STDLIB = $(HOME)/.local/lib
-STDMOD = $(HOME)/.local/include/fortran_stdlib/GNU-11.4.0
+# STDMOD = $(HOME)/.local/include/fortran_stdlib/GNU-11.4.0
+INCLUDES = $(HOME)/.local/include
 
 
-.PHONY: all testldpc testalpha test libraries py
+.PHONY: all testldpc testalpha test libraries py programs
 
-all: libraries test py
-libraries: lib/libldpc.a lib/libalpha.a lib/libsimtools.a
+all: libraries programs
+libraries: lib/libldpc.a lib/libalpha.a lib/libsimtools.a lib/libnoisemapper.a
 test: testldpc testalpha
 
 
@@ -46,7 +47,7 @@ O_ALPHA     = $(O_FORTRAN)/alpha
 F_SRC_ALPHA = $(F_SRC_ROOT)/alpha
 $(O_ALPHA)/%.o : $(F_SRC_ALPHA)/%.f90
 	@mkdir -p $(@D) $(O_MODS)
-	gfortran -fPIC $(OPTIMIZE) -c $(F_SRC_ALPHA)/$(*F).f90 -J$(O_MODS) -I$(O_MODS) -o $@
+	gfortran $(OPTIMIZE) -c $(F_SRC_ALPHA)/$(*F).f90 -J$(O_MODS) -I$(O_MODS) -o $@
 
 ALPHA_MODS = alpha_pam
 ALPHA_OBJS = $(patsubst %, $(O_ALPHA)/%.o, $(ALPHA_MODS))
@@ -57,16 +58,30 @@ $(TEST_ALPHA) : lib/libalpha.a
 testalpha: $(TEST_ALPHA)
 
 
+# Noise Mapper library
+O_NM     = $(O_FORTRAN)/noisemapper
+F_SRC_NM = $(F_SRC_ROOT)/noisemapper
+$(O_NM)/%.o : $(F_SRC_NM)/%.f90
+	@mkdir -p $(@D) $(O_MODS)
+	gfortran $(OPTIMIZE) -c $(F_SRC_NM)/$(*F).f90 -J$(O_MODS) -I$(O_MODS) \
+	-I$(INCLUDES) -L$(STDLIB) -lstdlib \
+	-o $@
+
+NM_MODS = noisemapper
+NM_OBJS = $(patsubst %, $(O_NM)/%.o, $(NM_MODS))
+lib/libnoisemapper.a: $(NM_OBJS) lib/libalpha.a
+
+
 # Simtools library
 O_SIMTOOLS     = $(O_FORTRAN)/simtools
 F_SRC_SIMTOOLS = $(F_SRC_ROOT)/simtools
-$(O_SIMTOOLS)/%.o : $(F_SRC_SIMTOOLS)/%.f90 lib/libldpc.a lib/libalpha.a
+$(O_SIMTOOLS)/%.o : $(F_SRC_SIMTOOLS)/%.f90 lib/libldpc.a lib/libalpha.a lib/libnoisemapper.a
 	@mkdir -p $(@D) $(O_MODS)
-	gfortran -fPIC $(OPTIMIZE) -c $(F_SRC_SIMTOOLS)/$(*F).f90 -J$(O_MODS) -I$(O_MODS) \
-		-L$(STDLIB) -I$(STDMOD) -lfortran_stdlib \
-		-fcoarray=lib -lopenmpi -o $@
+	caf $(OPTIMIZE) -c $(F_SRC_SIMTOOLS)/$(*F).f90 -J$(O_MODS) -I$(O_MODS) \
+		-L$(STDLIB) -I$(INCLUDES) -lstdlib -lforbear \
+		-fcoarray=lib -lcaf_openmpi -o $@
 
-SIMTOOLS_MODS = sim_direct_channel
+SIMTOOLS_MODS = sim_direct_channel sim_rrs
 SIMTOOLS_OBJS = $(patsubst %, $(O_SIMTOOLS)/%.o, $(SIMTOOLS_MODS))
 lib/libsimtools.a : $(SIMTOOLS_OBJS)
 
@@ -77,6 +92,21 @@ lib/libsimtools.a : $(SIMTOOLS_OBJS)
 lib/lib%.a :
 	ar r $@ $(O_FORTRAN)/$(*F)/*.o
 
+
+
+
+# Programs
+PROGS = reverse_soft_reconciliation direct_reconciliation try_mpi
+F_SRC_PROGS = programs
+O_PROGS = $(BUILD)/programs
+programs: $(patsubst %, $(O_PROGS)/%, $(PROGS))
+
+$(O_PROGS)/%: $(F_SRC_PROGS)/%.f90 lib/libsimtools.a
+	@mkdir -p $(@D)
+	caf $< -o $@ \
+		-fcoarray=lib -lcaf_openmpi \
+		-lsimtools -lFLAP -lIO-Fortran-Library -lforbear -lalpha -lldpc -lnoisemapper -lstdlib \
+		-L$(STDLIB) -I$(INCLUDES) -Llib -I$(O_MODS)
 
 
 # Generic executable

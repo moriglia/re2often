@@ -29,6 +29,7 @@ module alpha_pam
      procedure, pass(this), public :: symbol_to_grey_array
      procedure, pass(this), public :: random_symbol
      procedure, pass(this), public :: symbol_index_to_real
+     procedure, pass(this), public :: free
   end type TAlphaPAM
 
 
@@ -39,6 +40,15 @@ module alpha_pam
 
 contains
 
+  subroutine free(this)
+    class(TAlphaPAM), intent(inout) :: this
+
+    if(allocated(this%probabilities    )) deallocate(this%probabilities    )
+    if(allocated(this%constellation    )) deallocate(this%constellation    )
+    if(allocated(this%symbol_to_bit_map)) deallocate(this%symbol_to_bit_map)
+  end subroutine free
+
+  
   function TAlphaPAMConstructor(B, probabilities, step) result (this)
     integer, intent(in) :: B
     real(wp), intent(in), optional :: probabilities(0:ishft(1,B)-1)
@@ -48,6 +58,8 @@ contains
     integer :: i, M
     real(wp) :: base
 
+    call this%free
+    
     this%B = B
     M = ishft(1,B)
     this%M = M

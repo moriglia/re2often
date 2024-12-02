@@ -35,6 +35,7 @@ module noise_mapper
      ! Pre-calculated parameters
      real(wp), allocatable :: y_range(:)
      real(wp), allocatable :: F_Y_range(:)
+     integer :: intervals_per_step
 
      ! Monotonicity Configuration
      logical(kb), allocatable :: monotonicity_config(:)
@@ -48,25 +49,38 @@ module noise_mapper
 
      procedure, pass, public :: hard_decide_index
 
-     procedure, pass, public :: generate_soft_metric
+     procedure, pass, private :: generate_soft_metric_single
+     procedure, pass, private :: generate_soft_metric_array
+     generic, public :: generate_soft_metric => &
+          generate_soft_metric_single, generate_soft_metric_array
      procedure, pass, public :: reconstruct_sample_from_metric
 
      procedure, pass, private :: demap_metric_to_lappr_single_transmission
      procedure, pass, private :: demap_metric_to_lappr_array
      generic, public :: demap_metric_to_lappr => &
           demap_metric_to_lappr_single_transmission, demap_metric_to_lappr_array
+
+     procedure, pass, public  :: update_noise_sigma
+     procedure, pass, public :: free
   end type TNoiseMapper
 
   interface TNoiseMapper
      module procedure TNoiseMapperConstructor
   end interface TNoiseMapper
-
-  ! interface F_Y
-  !    module procedure y_to_cdf
-  !    module procedure y_to_cdf_array
-  ! end interface F_Y
-
 contains
+
+  subroutine free(this)
+    class(TNoiseMapper), intent(inout) :: this
+
+    if (allocated(this%y_thresholds)) deallocate(this%y_thresholds)
+    if (allocated(this%F_Y_thresholds)) deallocate(this%F_Y_thresholds)
+    if (allocated(this%delta_F_Y)) deallocate(this%delta_F_Y)
+    if (allocated(this%monotonicity_config)) deallocate(this%monotonicity_config)
+    if (allocated(this%y_range))   deallocate(this%y_range) 
+    if (allocated(this%F_Y_range)) deallocate(this%F_Y_range)
+  end subroutine free
+
+  
   function TNoiseMapperConstructor(B, probabilities, step, & ! Alphabet parameters
        sigma, monotonicity_config, intervals_per_step) &     ! Noise Mapper parameters
        result (this)
@@ -82,6 +96,10 @@ contains
 
     integer :: i, n_range
     real(wp) :: y_low, y_high
+
+    call this%TAlphaPAM%free
+    call this%free
+    
 
     if (present(probabilities)) then
        if (present(step)) then
@@ -100,13 +118,12 @@ contains
     this%sigma = sigma
     this%sigmaSquare = sigma**2
 
-
     allocate(this%y_thresholds(1:this%M-1))
     allocate(this%F_Y_thresholds(0:this%M))
     allocate(this%delta_F_Y(0:this%M-1))
+
     call this%set_y_thresholds([(real(i+1-ishft(this%M, -1), wp)*this%step, i = 0, this%M-2)])
 
-    
     allocate(this%monotonicity_config(0:this%M-1))
     if (present(monotonicity_config)) then
        this%monotonicity_config = monotonicity_config
@@ -119,15 +136,16 @@ contains
     y_high = this%constellation(this%M-1) + sigma*sqrt(-2.0_wp*log(0.01_wp))
     y_low  = - y_high
     if (present(intervals_per_step)) then
+       this%intervals_per_step = intervals_per_step
        n_range = ceiling((y_high-y_low)*intervals_per_step/this%step)
     else
+       this%intervals_per_step = 1000
        n_range = ceiling((y_high-y_low)*1000/this%step)
     end if
     allocate(this%y_range(0:n_range))
     allocate(this%F_Y_range(0:n_range))
     this%y_range = [(y_low + real(i,wp)*(y_high-y_low)/n_range, i=0, n_range)]
     this%F_Y_range = this%CDF_Y(this%y_range)
-    
   end function TNoiseMapperConstructor
 
 
@@ -145,9 +163,32 @@ contains
     
     this%delta_F_Y(1:this%M-1) = this%F_Y_thresholds(2:this%M) - this%F_Y_thresholds(1:this%M-1)
     this%delta_F_Y(0) = this%F_Y_thresholds(1)
-    ! this%delta_F_Y(this%M-1) = 1.0_wp - this%F_Y_thresholds(this%M-1)
   end subroutine set_y_thresholds
 
+
+  subroutine update_noise_sigma(this, sigma)
+    class(TNoiseMapper), intent(inout) :: this
+
+    real(wp), intent(in) :: sigma
+
+    real(wp) :: y_high, y_low
+    integer  :: n_range, i
+
+    y_high = this%constellation(this%M-1) + sigma*sqrt(-2.0_wp*log(0.01_wp))
+    y_low  = - y_high
+    n_range = ceiling((y_high-y_low)*this%intervals_per_step/this%step)
+
+    if (allocated(this%y_range)) deallocate(this%y_range)
+    if (allocated(this%F_Y_range)) deallocate(this%F_Y_range)
+
+    allocate(this%y_range(0:n_range))
+    allocate(this%F_Y_range(0:n_range))
+    
+    this%y_range = [(y_low + real(i,wp)*(y_high-y_low)/n_range, i=0, n_range)]
+    this%F_Y_range = this%CDF_Y(this%y_range)
+
+    call this%set_y_thresholds(this%y_thresholds)
+  end subroutine update_noise_sigma
 
   function y_to_cdf(this, y) result (F)
     class(TNoiseMapper) :: this
@@ -233,7 +274,7 @@ contains
   end function hard_decide_index
 
 
-  function generate_soft_metric(this, y, i) result (nhat)
+  function generate_soft_metric_single(this, y, i) result (nhat)
     class(TNoiseMapper), intent(in) :: this
     real(wp), intent(in) :: y
     integer, intent(in)  :: i
@@ -245,8 +286,23 @@ contains
     else
        nhat = (this%CDF_Y(y) - this%F_Y_thresholds(i))/this%delta_F_Y(i)
     end if
-  end function generate_soft_metric
-    
+  end function generate_soft_metric_single
+
+
+  function generate_soft_metric_array(this, y, i) result (nhat)
+    class(TNoiseMapper), intent(in) :: this
+    real(wp), intent(in) :: y(:)
+    integer, intent(in)  :: i(size(y))
+
+    real(wp) :: nhat(size(y))
+
+    integer :: k
+
+    do k = 1, size(y)
+       nhat(k) = this%generate_soft_metric_single(y(k), i(k))
+    end do
+  end function generate_soft_metric_array
+
   
   function reconstruct_sample_from_metric(this, nhat, i) result(y)
     class(TNoiseMapper), intent(in) :: this

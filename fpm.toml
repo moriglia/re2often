@@ -1,5 +1,5 @@
 name="re2often"
-description="Reverse Reconciliation (Re^2) Softening (2often-ing) fortran functions"
+description="Reverse Reconciliation (Re^2) Softening (Zoften-ing) fortran functions"
 license="GPL-3.0-or-later"
 author="Marco Origlia"
 copyright="Copyright 2024, Marco Origlia"
@@ -23,9 +23,17 @@ main = "direct_reconciliation.f90"
 name = "direct_reconciliation"
 
 
-# [[test]]
-# name = "ldpc"
-# source-dir = "test/fortran/ldpc"
+[[executable]]
+source-dir = "programs"
+main = "reverse_soft_reconciliation.f90"
+name = "reverse_soft_reconciliation"
+
+
+[[executable]]
+source-dir = "programs"
+main = "try_mpi.f90"
+name = "try_mpi"
+link = ["caf_openmpi"]
 
 
 [[test]]
