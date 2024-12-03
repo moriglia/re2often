@@ -26,6 +26,7 @@ module noise_mapper
      ! noise parameters
      real(wp) :: sigma
      real(wp) :: sigmaSquare
+     real(wp) :: N0
 
      ! Threshold parameters
      real(wp), allocatable :: y_thresholds(:)
@@ -61,7 +62,8 @@ module noise_mapper
           demap_metric_to_lappr_single_transmission, demap_metric_to_lappr_array
 
      procedure, pass, public  :: update_noise_sigma
-     procedure, pass, public :: free
+     procedure, pass, public :: free_noise_mapper
+     final :: TNoiseMapperDestructor
   end type TNoiseMapper
 
   interface TNoiseMapper
@@ -69,16 +71,23 @@ module noise_mapper
   end interface TNoiseMapper
 contains
 
-  subroutine free(this)
+  subroutine free_noise_mapper(this)
     class(TNoiseMapper), intent(inout) :: this
 
-    if (allocated(this%y_thresholds)) deallocate(this%y_thresholds)
-    if (allocated(this%F_Y_thresholds)) deallocate(this%F_Y_thresholds)
-    if (allocated(this%delta_F_Y)) deallocate(this%delta_F_Y)
+    if (allocated(this%y_thresholds))        deallocate(this%y_thresholds)
+    if (allocated(this%F_Y_thresholds))      deallocate(this%F_Y_thresholds)
+    if (allocated(this%delta_F_Y))           deallocate(this%delta_F_Y)
     if (allocated(this%monotonicity_config)) deallocate(this%monotonicity_config)
-    if (allocated(this%y_range))   deallocate(this%y_range) 
-    if (allocated(this%F_Y_range)) deallocate(this%F_Y_range)
-  end subroutine free
+    if (allocated(this%y_range))             deallocate(this%y_range) 
+    if (allocated(this%F_Y_range))           deallocate(this%F_Y_range)
+  end subroutine free_noise_mapper
+
+
+  subroutine TNoiseMapperDestructor(this)
+    type(TNoiseMapper) :: this
+    call this%free_noise_mapper
+    call this%TAlphaPAM%free_alpha_pam
+  end subroutine TNoiseMapperDestructor
 
   
   function TNoiseMapperConstructor(B, probabilities, step, & ! Alphabet parameters
@@ -97,8 +106,8 @@ contains
     integer :: i, n_range
     real(wp) :: y_low, y_high
 
-    call this%TAlphaPAM%free
-    call this%free
+    call this%TAlphaPAM%free_alpha_pam
+    call this%free_noise_mapper
     
 
     if (present(probabilities)) then
@@ -115,14 +124,17 @@ contains
        end if
     end if
 
-    this%sigma = sigma
-    this%sigmaSquare = sigma**2
-
     allocate(this%y_thresholds(1:this%M-1))
     allocate(this%F_Y_thresholds(0:this%M))
     allocate(this%delta_F_Y(0:this%M-1))
 
-    call this%set_y_thresholds([(real(i+1-ishft(this%M, -1), wp)*this%step, i = 0, this%M-2)])
+    if (present(intervals_per_step)) then
+       this%intervals_per_step = intervals_per_step
+    else
+       this%intervals_per_step = 1000
+    end if
+
+    call this%update_noise_sigma(sigma)
 
     allocate(this%monotonicity_config(0:this%M-1))
     if (present(monotonicity_config)) then
@@ -131,21 +143,6 @@ contains
        this%monotonicity_config(0::2) = .false.
        this%monotonicity_config(1::2) = .true.
     end if
-
-
-    y_high = this%constellation(this%M-1) + sigma*sqrt(-2.0_wp*log(0.01_wp))
-    y_low  = - y_high
-    if (present(intervals_per_step)) then
-       this%intervals_per_step = intervals_per_step
-       n_range = ceiling((y_high-y_low)*intervals_per_step/this%step)
-    else
-       this%intervals_per_step = 1000
-       n_range = ceiling((y_high-y_low)*1000/this%step)
-    end if
-    allocate(this%y_range(0:n_range))
-    allocate(this%F_Y_range(0:n_range))
-    this%y_range = [(y_low + real(i,wp)*(y_high-y_low)/n_range, i=0, n_range)]
-    this%F_Y_range = this%CDF_Y(this%y_range)
   end function TNoiseMapperConstructor
 
 
@@ -173,6 +170,10 @@ contains
 
     real(wp) :: y_high, y_low
     integer  :: n_range, i
+
+    this%sigma = sigma
+    this%sigmaSquare = sigma**2
+    this%N0 = 2*this%sigmaSquare
 
     y_high = this%constellation(this%M-1) + sigma*sqrt(-2.0_wp*log(0.01_wp))
     y_low  = - y_high
@@ -211,7 +212,7 @@ contains
     F(:) = 0.0_wp
 
     do i = 1, size(y)
-       F(i) = this%CDF_Y(y(i))
+       F(i) = this%y_to_cdf(y(i))
     end do
   end function y_to_cdf_array
 
@@ -341,14 +342,13 @@ contains
     D(:) = 0.0_wp
 
     a_j = this%constellation(j)
-    twoSigmaSquare = this%sigmaSquare * 2.0_wp
     do i = 0, this%M
        y_i = this%reconstruct_sample_from_metric(nhat, i)
        addendum = 0.0_wp
        do k = 0, this%M-1
           addendum = addendum + this%probabilities(k) * &
                exp( (this%constellation(k) - a_j) * &
-               (2*y_i - this%constellation(k) - a_j) / twoSigmaSquare)
+               (2*y_i - this%constellation(k) - a_j) / this%N0)
        end do
 
        do l = 0, this%B-1
