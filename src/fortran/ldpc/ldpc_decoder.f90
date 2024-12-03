@@ -31,7 +31,7 @@ module ldpc_decoder
      real(wp), allocatable :: B_buffer(:)
      real(wp), allocatable :: F_buffer(:)
    contains
-     ! final :: destructor
+     final :: destructor
      procedure, pass(this), public :: print => print_decoder
      procedure, pass(this), public :: check_llr
      procedure, pass(this), public :: word_to_synd
@@ -123,15 +123,15 @@ contains
   end subroutine edge_to_node_convert_table
 
   
-  Subroutine destructor(decoder)
+  subroutine destructor(decoder)
     type(TDecoder) :: decoder
     
-    deallocate(decoder%c_to_e)
-    deallocate(decoder%v_to_e)
-    deallocate(decoder%v_to_c)
-    deallocate(decoder%c_to_v)
-    deallocate(decoder%F_buffer)
-    deallocate(decoder%B_buffer)
+    if (allocated(decoder%c_to_e)  ) deallocate(decoder%c_to_e)
+    if (allocated(decoder%v_to_e)  ) deallocate(decoder%v_to_e)
+    if (allocated(decoder%v_to_c)  ) deallocate(decoder%v_to_c)
+    if (allocated(decoder%c_to_v)  ) deallocate(decoder%c_to_v)
+    if (allocated(decoder%F_buffer)) deallocate(decoder%F_buffer)
+    if (allocated(decoder%B_buffer)) deallocate(decoder%B_buffer)
   end subroutine destructor
 
   subroutine print_decoder(this)

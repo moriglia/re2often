@@ -21,8 +21,8 @@ module ldpc_edge_list
   type, public :: TEdgeList
      integer :: N
      integer, allocatable :: data(:)
-  !  contains
-  !    final :: destructor
+   contains
+     final :: destructor
   end type TEdgeList
 
   interface TEdgeList
@@ -40,7 +40,7 @@ contains
   subroutine destructor(buffer)
     type(TEdgeList) :: buffer
     
-    deallocate(buffer%data)
+    if (allocated(buffer%data)) deallocate(buffer%data)
   end subroutine destructor
   
 end module ldpc_edge_list
