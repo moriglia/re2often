@@ -16,10 +16,9 @@
 module sim_rrs
   use iso_c_binding, only: wp => c_double, ki => c_int, kl => c_bool
   use ldpc_decoder, only: TDecoder
-  use alpha_pam, only: TAlphaPAM
   use noise_mapper, only: TNoiseMapper
   use stdlib_stats_distribution_normal, only: rvs_normal
-  ! use forbear, only: bar_object
+  use forbear, only: bar_object
   implicit none
 
   public :: simulate_reverse_pam
@@ -41,7 +40,6 @@ contains
     real(wp), intent(out)    :: fer(Nsnr)
 
     type(TDecoder) :: decoder
-    type(TAlphaPAM) :: alphabet
     type(TNoiseMapper) :: noisemapper
     integer :: time_seed, seed(8)
 
@@ -57,8 +55,6 @@ contains
     real(wp), allocatable :: lappr(:)
     real(wp), allocatable :: lappr_updated(:)
 
-    real :: t0, t1, t_mapper, t_decoder, n_frames
-
     real(wp) :: N0, N0_half, sigma
 
     integer :: new_errors, n_ldpc_it
@@ -67,11 +63,11 @@ contains
     integer, allocatable :: f_error_count(:)[:]
     integer, allocatable :: f_count(:)[:]
 
-    ! type(bar_object) :: progress_bar
+    type(bar_object) :: progress_bar
     
     
     decoder = TDecoder(Ne, e_to_v, e_to_c)
-    alphabet = TAlphaPAM(bps)
+    noisemapper = TNoiseMapper(B=bps, sigma=1.0_wp)
 
     K = decoder%vnum - decoder%cnum
     N_symb = decoder%vnum / bps
@@ -100,44 +96,35 @@ contains
 
     sync all
 
-    ! if (this_image() == 1) then
-    !    call progress_bar%initialize(&
-    !         filled_char_string='+', prefix_string='SNR points progress |',&
-    !         suffix_string='| ', add_progress_percent=.true.)
-    !    call progress_bar%start
-    ! end if
-    noisemapper = TNoiseMapper(B=bps, sigma=1.0_wp)
+    if (this_image() == 1) then
+       call progress_bar%initialize(&
+            filled_char_string='+', prefix_string='SNR points progress |',&
+            suffix_string='| ', add_progress_percent=.true.)
+       call progress_bar%start
+    end if
+    
     
     snr_loop : do i_snr = 1 , Nsnr
-       N0 = 10.0_wp**(-snrdb_array(i_snr)/10.0_wp) * alphabet%variance
+       N0 = 10.0_wp**(-snrdb_array(i_snr)/10.0_wp) * noisemapper%variance
        N0_half = 0.5_wp * N0
        sigma = sqrt(N0_half)
 
        call noisemapper%update_noise_sigma(sigma)
 
-       t_mapper = 0.0
-       t_decoder = 0.0
-       n_frames = 1.0
-       
        frame_loop : do i_frame = 1, max_loops
-          call alphabet%random_symbol(x)
-          word = alphabet%symbol_to_grey_array(x)
+          call noisemapper%random_symbol(x)
+          word = noisemapper%symbol_to_grey_array(x)
           synd = decoder%word_to_synd(word)
           
-          y = rvs_normal(loc=alphabet%symbol_index_to_real(x), scale=sigma)
+          y = rvs_normal(loc=noisemapper%symbol_index_to_real(x), scale=sigma)
 
-          call cpu_time(t0)
           xhat = noisemapper%hard_decide_index(y)
           nhat = noisemapper%generate_soft_metric(y, xhat)
           lappr = noisemapper%demap_metric_to_lappr(nhat, x)
-          call cpu_time(t1)
-          t_mapper = t_mapper + t1 - t0
           
           n_ldpc_it = ldpc_iterations
-          call cpu_time(t0)
           call decoder%decode(lappr, lappr_updated, synd, n_ldpc_it)
-          call cpu_time(t1)
-          t_decoder = t_decoder + t1 - t0
+
           new_errors = word_lappr_errors(word(:K), lappr_updated(:K))
 
           critical
@@ -152,11 +139,9 @@ contains
                (f_count(i_snr)[1] > min_loops)) then
              exit frame_loop
           end if
-          n_frames = n_frames + 1
        end do frame_loop
        if (this_image() == 1) then
-          print '("PROGRESS [", I2,"/",I2,"]", 8x, "t_D=", f7.3, "s", 8x, "t_M=", f7.3, "s")', &
-            i_snr, Nsnr, t_decoder/n_frames, t_mapper/n_frames
+          call progress_bar%update(current=real(i_snr, 8)/real(Nsnr, 8))
        end if
     end do snr_loop
 
