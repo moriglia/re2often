@@ -16,7 +16,7 @@
 module noise_mapper
   use iso_c_binding, only: wp => c_double, kb => c_bool
   use alpha_pam, only: TAlphaPAM
-  use stdlib_stats_distribution_normal, only: cdf_normal
+  use stdlib_stats_distribution_normal, only: cdf_normal, rvs_normal
   use stdlib_kinds, only: dp
   implicit none
 
@@ -61,7 +61,13 @@ module noise_mapper
      generic, public :: demap_metric_to_lappr => &
           demap_metric_to_lappr_single_transmission, demap_metric_to_lappr_array
 
-     procedure, pass, public  :: update_noise_sigma
+     procedure, pass, public :: add_noise
+     procedure, pass, private :: y_to_lappr_single_norm
+     procedure, pass, private :: y_to_lappr_array_norm
+     generic, public :: y_to_lappr_norm => y_to_lappr_array_norm, y_to_lappr_single_norm
+
+     procedure, pass, public :: update_noise_sigma
+     procedure, pass, public :: update_noise_sigma_based_on_snr
      procedure, pass, public :: free_noise_mapper
      final :: TNoiseMapperDestructor
   end type TNoiseMapper
@@ -191,6 +197,46 @@ contains
     call this%set_y_thresholds(this%y_thresholds)
   end subroutine update_noise_sigma
 
+
+  subroutine update_noise_sigma_based_on_snr(this, snrdb)
+    class(TNoiseMapper), intent(inout) :: this
+    real(wp), intent(in)               :: snrdb
+
+    real(wp) :: sigma
+
+    sigma = sqrt(10.0_wp**(-snrdb/10.0_wp) * this%variance / 2)
+    call this%update_noise_sigma(sigma)
+  end subroutine update_noise_sigma_based_on_snr
+
+
+  subroutine add_noise(this, x, y)
+    class(TNoiseMapper), intent(in) :: this
+    real(wp), intent(in) :: x(:)
+    real(wp), intent(out):: y(size(x))
+
+    y = rvs_normal(loc=x, scale=this%sigma)
+  end subroutine add_noise
+
+  
+  function y_to_lappr_single_norm(this, y) result(lappr)
+    class(TNoiseMapper), intent(in) :: this
+    real(wp), intent(in) :: y
+    real(wp) :: lappr(0:this%B-1)
+
+    lappr = this%TAlphaPAM%y_to_lappr(this%N0, y)
+  end function y_to_lappr_single_norm
+
+
+  function y_to_lappr_array_norm(this, y) result(lappr)
+    class(TNoiseMapper), intent(in) :: this
+    real(wp), intent(in) :: y(:)
+    real(wp) :: lappr(0:size(y)*this%B-1)
+
+    lappr = this%TAlphaPAM%y_to_lappr(this%N0, y)
+  end function y_to_lappr_array_norm
+
+  
+  
   function y_to_cdf(this, y) result (F)
     class(TNoiseMapper) :: this
     real(wp), intent(in) :: y

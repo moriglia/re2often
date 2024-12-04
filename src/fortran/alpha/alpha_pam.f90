@@ -30,7 +30,11 @@ module alpha_pam
      procedure, pass(this), public :: random_symbol
      procedure, pass(this), public :: symbol_index_to_real
      procedure, pass(this), public :: free_alpha_pam
+     procedure, pass, private :: y_to_lappr_single
+     procedure, pass, private :: y_to_lappr_array
+     generic, public :: y_to_lappr => y_to_lappr_array, y_to_lappr_single
      ! final :: TAlphaPAMDestructor
+     ! procedure, pass, public :: print => print_alpha
   end type TAlphaPAM
 
 
@@ -159,5 +163,65 @@ contains
 
     x = this%constellation(idx)
   end function symbol_index_to_real
+
+
+  function y_to_lappr_single(this, N0, y) result (lappr)
+    class(TAlphaPAM), intent(in)  :: this
+    real(wp), intent(in) :: N0 ! Note that this is 2\sigma^2
+    real(wp), intent(in) :: y
+
+    real(wp) :: lappr(0:this%B-1)
+    real(wp) :: D(0:this%B-1)
+
+    real(wp) :: addendum
+    integer :: i, b
+    
+    lappr(:) = 0
+    D(:)   = 0
+    
+    do i = 0, this%M-1
+       addendum = y - this%constellation(i)
+       addendum = addendum * addendum / N0
+       addendum = this%probabilities(i) * exp(-addendum)
+       do b = 0, this%B - 1
+          if (this%symbol_to_bit_map(i,b)) then
+             D(b) = D(b) + addendum
+          else
+             lappr(b) = lappr(b) + addendum
+          end if
+       end do
+    end do
+
+    lappr = log(lappr) - log(D)
+  end function y_to_lappr_single
+
+
+  function y_to_lappr_array(this, N0, y) result (lappr)
+    class(TAlphaPAM), intent(in)  :: this
+    real(wp), intent(in) :: N0 ! Note that this is 2\sigma^2
+    real(wp), intent(in) :: y(0:)
+
+    real(wp) :: lappr(0:size(y)*this%B-1)
+
+    integer :: i
+
+    do i = 0, size(y)-1
+       lappr(i*this%B : (i+1)*this%B-1) = this%y_to_lappr_single(N0, y(i))
+    end do
+  end function y_to_lappr_array
+
   
+  subroutine print_alpha(this)
+    class(TAlphaPAM), intent(in) :: this
+
+    integer :: i
+
+    print *, "TAlphaPAM object:"
+    print '("M=", I4, "  BpS=", I2)', this%M, this%B
+    do i = 0, this%M-1
+       print '(I4, 4x, f6.2, 4x, f5.3, 4x, "=>", 4x, *(L2))', &
+            i, this%constellation(i), this%probabilities(i), this%symbol_to_bit_map(i,:)
+    end do
+    print *, ""
+  end subroutine print_alpha
 end module alpha_pam

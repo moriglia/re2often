@@ -14,13 +14,16 @@
 !    You should have received a copy of the GNU General Public License
 !    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 program direct_reconciliation
-  use sim_direct_channel, only: simulate_pam
-  use flap, only: command_line_interface
   use io_fortran_lib, only: from_file, to_file
   use iso_c_binding, only: wp => c_double, ki => c_int, kl => c_bool
+  use ldpc_decoder, only: TDecoder
+  use noise_mapper, only: TNoiseMapper
+  use forbear, only: bar_object
+  use stdlib_random, only: stdlib_random_seed => random_seed
   implicit none
 
-  type(command_line_interface) :: cli
+  integer :: argc
+  character(len=500), allocatable :: argv(:)
 
   character(1000) :: tanner_file
   character(1000) :: output_file
@@ -33,56 +36,200 @@ program direct_reconciliation
   integer(ki) :: max_iter       ! Maximum number of LDPC iterations
 
   integer(ki), allocatable :: edge_definition(:,:)
-  real(wp), allocatable :: outdata(:,:)
+  real(wp), pointer :: outdata(:,:)
+
+  real(wp), pointer :: snrdb_array(:), ber(:), fer(:)
   
   integer :: i
-
-
-  call cli%init(progname="direct_reconciliation", &
-       description="Evaluate bit error rate for the direct reconciliation with a PAM modulation", &
-       license="GPL-3.0-or-later")
-
-  call cli%add(switch="--snr", nargs='2', help="Signal to Noise Ratio range [dB]", required=.true.)
-  call cli%add(switch="--nsnr", help="Number of SNR points", required=.true.)
-  call cli%add(switch="--bps", help="Bits per Symbol", required=.true.)
-  call cli%add(switch="--minframeerr", help="Minimum frame errors", required=.true.)
-  call cli%add(switch="--maxsimloops", help="Maximum simulation loops", required=.true.)
-  call cli%add(switch="--minsimloops", help="Minimum simulation loops", required=.true.)
-  call cli%add(switch="--tannerfile", help="CSV file with Tanner graph definition", required=.true.)
-  call cli%add(switch="--maxldpciter", help="Maximum number of LDPC iterations", required=.true.)
-  call cli%add(switch="--csvout", help="Output file", required=.true.)
-
-  call cli%get(val=snr, switch="--snr")
-  call cli%get(val=nsnr, switch="--nsnr")
-  call cli%get(val=bps, switch="--bps")
-  call cli%get(val=min_ferr, switch="--minframeerr")
-  call cli%get(val=max_sim, switch="--maxsimloops")
-  call cli%get(val=min_sim, switch="--minsimloops")
-  call cli%get(val=max_iter, switch="--maxldpciter")
-  call cli%get(val=tanner_file, switch="--tannerfile")
-  call cli%get(val=output_file, switch="--csvout")
   
+  type(TDecoder) :: decoder
+  type(TNoiseMapper) :: noisemapper
+  integer :: time_seed
+  integer:: seed(8)
+
+  integer :: i_snr, i_frame
+  integer :: N_symb, K
+
+  integer, allocatable  :: x_i(:)
+  real(wp), allocatable :: x(:)
+  real(wp), allocatable :: y(:)
+  logical, allocatable :: word(:)
+  logical, allocatable :: synd(:)
+  real(wp), allocatable :: lappr(:)
+  real(wp), allocatable :: lappr_updated(:)
+
+  integer :: new_errors, n_ldpc_it
+
+  integer, allocatable :: b_error_count(:)[:]
+  integer, allocatable :: f_error_count(:)[:]
+  integer, allocatable :: f_count(:)[:]
+
+  type(bar_object) :: progress_bar
+  
+
+  argc = command_argument_count()
+  allocate(argv(argc))
+  
+  do i = 1, argc
+     call get_command_argument(i, argv(i))
+  end do
+  
+  i = 1
+  do while(i <= argc)
+     if (argv(i) == "--nsnr") then
+        read(argv(i+1),*) nsnr
+        i = i + 2
+     elseif (argv(i) == "--snr") then
+        read(argv(i+1), *) snr(1)
+        read(argv(i+2), *) snr(2)
+        i = i+3
+     elseif (argv(i) == "--bps") then
+        read(argv(i+1),*) bps
+        i = i + 2
+     elseif (argv(i) == "--minframeerr") then
+        read(argv(i+1), *) min_ferr
+        i = i + 2
+     elseif (argv(i) == "--minsimloops") then
+        read(argv(i+1), *) min_sim
+        i = i + 2
+     elseif (argv(i) == "--maxsimloops") then
+        read(argv(i+1), *) max_sim
+        i = i + 2
+     elseif (argv(i) == "--maxldpciter") then
+        read(argv(i+1), *) max_iter
+        i = i + 2
+     elseif (argv(i) == "--tannerfile") then
+        call get_command_argument(i+1, tanner_file)
+        i = i + 2
+     elseif (argv(i) == "--csvout") then
+        call get_command_argument(i+1, output_file)
+        i = i + 2
+     else
+        print *, "Unrecognized argument: ", argv(i)
+        stop
+     end if
+  end do  
 
   
   call from_file(file=tanner_file, into=edge_definition, header=.true.)
 
   allocate(outdata(nsnr,3))
-  outdata(:, 1) = [(snr(1) + real(i, wp)*(snr(2)-snr(1))/real(nsnr - 1, wp), i = 0, nsnr-1)]
-  outdata(:,2:) = 0.0_wp
 
+  snrdb_array => outdata(:,1)
+  ber         => outdata(:,2)
+  fer         => outdata(:,3)
   
+  snrdb_array = [(snr(1) + real(i, wp)*(snr(2)-snr(1))/real(nsnr - 1, wp), i = 0, nsnr-1)]
+  outdata(:,2:) = 0.0_wp
+  
+  decoder = TDecoder(&
+       edge_definition(1 , 1), &
+       edge_definition(2:, 2), &
+       edge_definition(2:, 3))
+  noisemapper = TNoiseMapper(B=bps, sigma=1.0_wp)
+  
+  K = decoder%vnum - decoder%cnum
+  N_symb = decoder%vnum / bps
+  allocate(x(N_symb))
+  allocate(x_i(N_symb))
+  allocate(y(N_symb))
+  allocate(word(decoder%vnum))
+  allocate(synd(decoder%cnum))
+  allocate(lappr(decoder%vnum))
+  allocate(lappr_updated(decoder%vnum))
 
+  call random_seed(get=seed)
+  call sleep(this_image())
+  call system_clock(time_seed)
+  seed(1) = mod(seed(1)*sum(seed(this_image():)), abs(time_seed) + 2) - 12399027
+  seed(2) = 467738 * this_image() * (seed(3) - time_seed) + iand(sum(seed(:this_image())), time_seed)
+  seed(3) = (time_seed + this_image()) * (2 + mod(abs(883 + seed(mod(time_seed, 8) + 1)), this_image())) + &
+       mod(sum(seed), max(maxval(seed(:)), 37))
+  seed(4) = mod(987654321*time_seed, abs(time_seed - this_image()*this_image()*this_image()) + 3)
+  seed(5) = seed(7)/7 - time_seed*this_image() + this_image() ** mod(abs(seed(5)), 29)
+  seed(6) = sum(seed(::2) ** abs(time_seed)) + 929812093 / sum(seed(1::2))
+  seed(7) = this_image() * seed(6) * 661242 - this_image() / (seed(6) + time_seed**abs(sum(seed)))
+  seed(8) = time_seed - seed(4)**this_image() + sum(seed(2::2)) ** abs(time_seed) + 329999999/time_seed
+  call stdlib_random_seed(sum(seed), time_seed) ! Necessary for the random functions in the stdlib
+  
+  allocate(b_error_count(nsnr)[*])
+  allocate(f_error_count(nsnr)[*])
+  allocate(f_count(nsnr)[*])
+  
+  b_error_count(:) = 0
+  f_error_count(:) = 0
+  f_count(:) = 0
+  
+  sync all
+  
+  if (this_image() == 1) then
+     call progress_bar%initialize(&
+          filled_char_string='+', prefix_string='SNR points progress |',&
+          suffix_string='| ', add_progress_percent=.true.)
+     call progress_bar%start
+  end if
+  
+  snr_loop : do i_snr = 1 , nsnr
+     call noisemapper%update_noise_sigma_based_on_snr(snrdb_array(i_snr))
+     
+     frame_loop : do i_frame = 1, max_sim
+        call noisemapper%random_symbol(x_i)
+        word = noisemapper%symbol_to_grey_array(x_i)
+        synd = decoder%word_to_synd(word)
+        
+        x = noisemapper%symbol_index_to_real(x_i)
+        call noisemapper%add_noise(x, y)
+        lappr = noisemapper%y_to_lappr_norm(y)
 
-  call simulate_pam(outdata(:,1), nsnr, bps, &
-       min_ferr, max_sim, min_sim, &
-       edge_definition(2:,2), & ! e_to_v is vid in the tanner file
-       edge_definition(2:,3), & ! e_to_c is cid in the tanner file
-       edge_definition(1,1), &  ! Number of edges is the first entry of EID in the tanner file
-       max_iter, &
-       outdata(:,2), outdata(:,3))
+        n_ldpc_it = max_iter
+        call decoder%decode(lappr, lappr_updated, synd, n_ldpc_it)
+        new_errors = word_lappr_errors(word(:K), lappr_updated(:K))
+        
+        critical
+          if (new_errors > 0) then
+             b_error_count(i_snr)[1] = b_error_count(i_snr)[1] + new_errors
+             f_error_count(i_snr)[1] = f_error_count(i_snr)[1] + 1
+          end if
+          f_count(i_snr)[1] = f_count(i_snr)[1] + 1
+        end critical
+
+        if ((f_error_count(i_snr)[1] > min_ferr) .and. &
+             (f_count(i_snr)[1] > min_sim)) then
+           exit frame_loop
+        end if
+     end do frame_loop
+
+     if (this_image()==1) then
+        call progress_bar%update(current=real(i_snr, 8)/real(Nsnr, 8))
+     end if
+  end do snr_loop
+
+  sync all
 
   if (this_image() == 1) then
+     ber = real(b_error_count, wp)/real(f_count*K, wp)
+     fer = real(f_error_count, wp)/real(f_count, wp)
+
      call to_file(x=outdata, file=output_file, header=["SNR", "BER", "FER"], fmt="f")
   end if
+  
+  deallocate(outdata)
+
+contains
+
+  function word_lappr_errors(word, lappr) result (errors)
+    logical,  intent(in) :: word(:)
+    real(wp), intent(in) :: lappr(size(word))
+
+    integer :: errors
+
+    integer :: i
+    errors = 0
+    do i = 1, size(word)
+       if (word(i) .neqv. (lappr(i) < 0)) then
+          errors = errors + 1
+       end if
+    end do
+  end function word_lappr_errors
 
 end program direct_reconciliation
