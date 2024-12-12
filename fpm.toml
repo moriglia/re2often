@@ -1,0 +1,40 @@
+name="re2often"
+description="Reverse Reconciliation (Re^2) S(Z=2)oftening toolbox"
+license="GPL-3.0-or-later"
+author="Marco Origlia"
+copyright="Copyright 2024, Marco Origlia"
+
+
+
+[build]
+auto-executables = false
+auto-examples = false
+auto-tests = false
+
+
+[[executable]]
+name = "direct-reconciliation"
+source-dir = "programs"
+main = "direct_reconciliation.f90"
+
+[executable.dependencies]
+IO-Fortran-Library = { git="https://github.com/acbbullock/IO-Fortran-Library", branch="main" }
+fldpc = { git="https://github.com/moriglia/fldpc", branch="main" }
+forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
+mpi = "*"
+
+
+[library]
+source-dir="src"
+
+
+[install]
+library = true
+
+
+# [test.dependencies]
+# test-drive = { git="https://github.com/fortran-lang/test-drive.git", tag="v0.5.0" }
+
+
+[dependencies]
+stdlib = "*"
