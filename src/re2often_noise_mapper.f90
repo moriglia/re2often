@@ -46,6 +46,7 @@ module re2often_noise_mapper
     contains
         procedure, public, pass :: free_noise_mapper
         procedure, public, pass :: random_symbols
+        procedure, public, pass :: symbol_index_to_value
         procedure, public, pass :: update_N0
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
@@ -140,6 +141,19 @@ contains
             end if
         end do
     end function random_symbols
+
+
+    elemental function symbol_index_to_value(this, x_index) result (x_value)
+        !! Convert constellation symbol index to symbol constellation value
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise Mapper
+        integer, intent(in) :: x_index
+        !! constellation symbol index
+        double precision :: x_value
+        !! constellation point corresponding to index `x_index` (`x_value` = \(a_\texttt{x_index}\)
+
+        x_value = this%constellation(x_index)
+    end function symbol_index_to_value
 
 
     subroutine update_N0(this, N0)

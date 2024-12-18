@@ -35,6 +35,7 @@ contains
         testsuite = [&
             new_unittest("Constructor", test_constructor),&
             new_unittest("Draw random symbols", test_random_symbol), &
+            new_unittest("Convert symbol index to constellation point", test_symbol_index_to_value), &
             new_unittest("Update N0", test_update_N0)]
     end subroutine collect_suite
 
@@ -132,6 +133,24 @@ contains
         x = nm%random_symbols()
         call check(error, all(x/=1))
     end subroutine test_random_symbol
+
+
+    subroutine test_symbol_index_to_value(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+        integer :: x_i(100)
+        double precision :: x(100), x_e(100)
+
+        integer :: i
+
+        nm = TNoiseMapper(3, 0.5d0)
+        x_i = [(mod(i, 8), i = 1, 100)]
+        x_e = -7d0 + real(x_i, dp)*2d0
+
+        x = nm%symbol_index_to_value(x_i)
+        call check(error, all(abs(x_e - x) < 1e-12))
+    end subroutine test_symbol_index_to_value
 
 
     subroutine test_update_N0(error)
