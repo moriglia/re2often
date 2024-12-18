@@ -41,7 +41,7 @@ module re2often_noise_mapper
         !! Symbol Variance
         double precision, public :: N0
         !! Total complex noise variance (Actual on each quadrature is N0/2)
-        logical(1), allocatable :: symbol_to_bit_map(:,:)
+        logical, allocatable :: symbol_to_bit_map(:,:)
         !! Bits (rows) associated to each symbol (row index), size is (0:M-1, 0:bps-1)
     contains
         procedure, public, pass :: free_noise_mapper
@@ -51,6 +51,9 @@ module re2often_noise_mapper
         procedure, public, pass :: y_to_lappr_single
         procedure, public, pass :: y_to_lappr_array
         generic, public         :: y_to_lappr => y_to_lappr_single, y_to_lappr_array
+        procedure, public, pass :: symbol_to_word_single
+        procedure, public, pass :: symbol_to_word_array
+        generic, public         :: symbol_to_word => symbol_to_word_single, symbol_to_word_array
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -157,6 +160,36 @@ contains
 
         x_value = this%constellation(x_index)
     end function symbol_index_to_value
+
+
+    function symbol_to_word_single(this, symbol) result(word)
+        !! De-map a symbol
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise Mapper
+        integer, intent(in) :: symbol
+        !! index of the constellation symbol
+        logical :: word(0:this%bps-1)
+        !! bit group associated to the symbol
+
+        word = this%symbol_to_bit_map(symbol, :)
+    end function symbol_to_word_single
+
+
+    function symbol_to_word_array(this, symbol) result(word)
+        !! De-map a symbol
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise Mapper
+        integer, intent(in) :: symbol(0:)
+        !! array of indexes of the constellation symbols
+        logical :: word(0:size(symbol)*this%bps-1)
+        !! bit word associated to the symbol array
+
+        integer :: i
+
+        do i = 0, size(symbol)-1
+            word(i*this%bps : (i+1)*this%bps - 1) = this%symbol_to_bit_map(symbol(i), :)
+        end do
+    end function symbol_to_word_array
 
 
     subroutine update_N0(this, N0)

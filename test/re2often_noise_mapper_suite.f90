@@ -36,6 +36,7 @@ contains
             new_unittest("Constructor", test_constructor),&
             new_unittest("Draw random symbols", test_random_symbol), &
             new_unittest("Convert symbol index to constellation point", test_symbol_index_to_value), &
+            new_unittest("Convert symbol sequence to word", test_symbol_to_word), &
             new_unittest("Update N0", test_update_N0), &
             new_unittest("Test LAPPR construction for direct channel", test_y_to_lappr)]
     end subroutine collect_suite
@@ -154,6 +155,24 @@ contains
     end subroutine test_symbol_index_to_value
 
 
+    subroutine test_symbol_to_word(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+        integer :: x(5)
+
+        x = [0,3,3,1,2]
+
+        nm = TNoiseMapper(bps=2, N0=1d0)
+        call check(error, all(nm%symbol_to_word(x) .eqv. [&
+            .false., .false., &
+            .false., .true. , &
+            .false., .true. , &
+            .true. , .false., &
+            .true. , .true.   ]))
+    end subroutine test_symbol_to_word
+
+
     subroutine test_update_N0(error)
         type(error_type), allocatable, intent(out) :: error
 
@@ -171,6 +190,7 @@ contains
         call nm%update_N0(-0.15d0)
         call check(error, nm%N0, 0d0, thr=1d-12)
     end subroutine test_update_N0
+
 
     subroutine test_y_to_lappr(error)
         type(error_type), allocatable, intent(out) :: error
