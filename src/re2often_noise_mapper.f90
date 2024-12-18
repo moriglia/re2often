@@ -46,6 +46,7 @@ module re2often_noise_mapper
     contains
         procedure, public, pass :: free_noise_mapper
         procedure, public, pass :: random_symbols
+        procedure, public, pass :: update_N0
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -91,7 +92,7 @@ contains
 
         nm%bps = bps
         nm%M = ishft(1, bps)
-        nm%N0 = N0
+        call nm%update_N0(N0)
 
         allocate(nm%constellation(0:nm%M-1))
         allocate(nm%probabilities(0:nm%M-1))
@@ -139,5 +140,16 @@ contains
             end if
         end do
     end function random_symbols
+
+
+    subroutine update_N0(this, N0)
+        !! Update total noise variance
+        class(TNoiseMapper), intent(inout) :: this
+        !! Noise mapper object
+        double precision, intent(in) :: N0
+        !! Total noise variance on both quadratures
+
+        this%N0 = max(N0, 0d0)
+    end subroutine update_N0
 
 end module re2often_noise_mapper

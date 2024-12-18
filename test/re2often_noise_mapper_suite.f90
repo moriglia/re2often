@@ -34,7 +34,8 @@ contains
 
         testsuite = [&
             new_unittest("Constructor", test_constructor),&
-            new_unittest("Draw random symbols", test_random_symbol)]
+            new_unittest("Draw random symbols", test_random_symbol), &
+            new_unittest("Update N0", test_update_N0)]
     end subroutine collect_suite
 
 
@@ -132,4 +133,22 @@ contains
         call check(error, all(x/=1))
     end subroutine test_random_symbol
 
+
+    subroutine test_update_N0(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+
+        nm = TNoiseMapper(2, 0.5d0)
+
+        call check(error, nm%N0, 0.5d0, thr=1d-12)
+        if (allocated(error)) return
+
+        call nm%update_N0(0.75d0)
+        call check(error, nm%N0, 0.75d0, thr=1d-12)
+        if (allocated(error)) return
+
+        call nm%update_N0(-0.15d0)
+        call check(error, nm%N0, 0d0, thr=1d-12)
+    end subroutine test_update_N0
 end module re2often_noise_mapper_suite
