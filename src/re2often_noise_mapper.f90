@@ -45,6 +45,7 @@ module re2often_noise_mapper
         !! Bits (rows) associated to each symbol (row index), size is (0:M-1, 0:bps-1)
     contains
         procedure, public, pass :: free_noise_mapper
+        procedure, public, pass :: random_symbols
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -116,5 +117,27 @@ contains
             end do
         end do
     end function TNoiseMapperConstructor
+
+
+    impure elemental function random_symbols(this) result(x)
+        !! Return a random symbol index of the constellation
+        class(TNoiseMapper), intent(in) :: this
+        !! TNoiseMapper object to use for probabilities and constellation
+        integer :: x
+        !! Drawn result as index of constellation symbol: \(i \in \{0,\ldots,M-1\}\)
+
+        double precision :: rnd
+        integer :: i
+        call random_number(rnd)
+
+        x = this%M-1
+        do i = 0, this%M-2
+            rnd = rnd - this%probabilities(i)
+            if (rnd .lt. 0) then
+                x = i
+                return
+            end if
+        end do
+    end function random_symbols
 
 end module re2often_noise_mapper

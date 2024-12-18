@@ -32,7 +32,9 @@ contains
     subroutine collect_suite(testsuite)
         type(unittest_type), allocatable, intent(out) :: testsuite(:)
 
-        testsuite = [new_unittest("Constructor", test_constructor)]
+        testsuite = [&
+            new_unittest("Constructor", test_constructor),&
+            new_unittest("Draw random symbols", test_random_symbol)]
     end subroutine collect_suite
 
 
@@ -102,5 +104,32 @@ contains
         call check(error, all(nm%symbol_to_bit_map(:, 1) .eqv. &
             [.false., .false., .true., .true.]))
     end subroutine test_constructor
+
+
+    subroutine test_random_symbol(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+        integer :: x(100)
+
+        nm = TNoiseMapper(2, 0.22d0, [0d0, 0d0, 1d0, 0d0])
+        x = nm%random_symbols()
+        call check(error, all(x==2))
+        if (allocated(error)) return
+
+        nm = TNoiseMapper(2, 0.22d0, [0d0, 0d0, 0d0, 1d0])
+        x = nm%random_symbols()
+        call check(error, all(x==3))
+        if (allocated(error)) return
+
+        nm = TNoiseMapper(2, 0.22d0, [1d0, 0d0, 0d0, 0d0])
+        x = nm%random_symbols()
+        call check(error, all(x==0))
+        if (allocated(error)) return
+
+        nm = TNoiseMapper(2, 0.22d0, [5d-1, 0d0, 2d-1, 3d-1])
+        x = nm%random_symbols()
+        call check(error, all(x/=1))
+    end subroutine test_random_symbol
 
 end module re2often_noise_mapper_suite
