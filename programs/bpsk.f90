@@ -112,7 +112,7 @@ program bpsk
   f_error_count(:) = 0
   f_count(:)       = 0
 
-  snrdb_array(:) = [(-2.5 + real(i, wp)*0.1_wp, i=0, 20)]
+  snrdb_array(:) = [(-2.5 + real(i, wp)*0.05_wp, i=0, 20)]
   ! if (me == 1) then
   !    call progress_bar%initialize(&
   !         filled_char_string='+', prefix_string='SNR points progress |',&
@@ -172,6 +172,8 @@ program bpsk
      ! end if
   end do snr_loop
 
+  sync all
+
   if (me == 1) then
      print '(A, T16, A, T32, A, T48, A, T64, A, T80, A)', "SNR [dB]", "F_NUM", "ERR", "BER", "FERR", "FER"
      do i_snr = 1, nsnr
@@ -187,7 +189,7 @@ program bpsk
              snrdb_array(i_snr), f_count(i_snr), b_error_count(i_snr), ber(i_snr), f_error_count(i_snr), fer(i_snr)
      end do
 
-     call to_file(x=outdata, file="bpsk.csv", header=["SNR", "BER", "FER"], fmt="f")
+     call to_file(x=outdata, file="bpsk_50it.csv", header=["SNR", "BER", "FER"], fmt="f")
   end if
 
 
