@@ -36,7 +36,8 @@ contains
             new_unittest("Constructor", test_constructor),&
             new_unittest("Draw random symbols", test_random_symbol), &
             new_unittest("Convert symbol index to constellation point", test_symbol_index_to_value), &
-            new_unittest("Update N0", test_update_N0)]
+            new_unittest("Update N0", test_update_N0), &
+            new_unittest("Test LAPPR construction for direct channel", test_y_to_lappr)]
     end subroutine collect_suite
 
 
@@ -170,4 +171,38 @@ contains
         call nm%update_N0(-0.15d0)
         call check(error, nm%N0, 0d0, thr=1d-12)
     end subroutine test_update_N0
+
+    subroutine test_y_to_lappr(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+
+        double precision :: y(10), lappr(20)
+
+        nm = TNoiseMapper(1, 0.5d0)
+
+        call random_number(y)
+        ! even though they are not gaussian distributed,
+        ! we are just testing the deterministic relation
+        ! between channel output and lappr
+        y = 4d0*y - 1
+
+        lappr(:10) = nm%y_to_lappr(y)
+        call check(error, all(abs(lappr(:10) + 4d0*y/0.5d0) < 1e-12))
+        if (allocated(error)) return
+
+        nm = TNoiseMapper(2, 0.5d0)
+        lappr = nm%y_to_lappr(y)
+        ! print *, lappr
+        call check(error, all(abs(lappr(1::2) &
+            + log(exp(-(y-1)**2/0.5d0) + exp(-(y+1)**2/0.5d0)) &
+            - log(exp(-(y-3)**2/0.5d0) + exp(-(y+3)**2/0.5d0))) &
+            .lt. 1d-12))
+        if (allocated(error)) return
+
+        call check(error, all(abs(lappr(2::2) &
+            - log(exp(-(y+3)**2/0.5d0) + exp(-(y+1)**2/0.5d0)) &
+            + log(exp(-(y-3)**2/0.5d0) + exp(-(y-1)**2/0.5d0))) &
+            .lt. 1d-12))
+    end subroutine test_y_to_lappr
 end module re2often_noise_mapper_suite

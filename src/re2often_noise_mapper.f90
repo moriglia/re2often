@@ -48,6 +48,9 @@ module re2often_noise_mapper
         procedure, public, pass :: random_symbols
         procedure, public, pass :: symbol_index_to_value
         procedure, public, pass :: update_N0
+        procedure, public, pass :: y_to_lappr_single
+        procedure, public, pass :: y_to_lappr_array
+        generic, public         :: y_to_lappr => y_to_lappr_single, y_to_lappr_array
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -165,5 +168,61 @@ contains
 
         this%N0 = max(N0, 0d0)
     end subroutine update_N0
+
+
+    function y_to_lappr_single(this, y) result(lappr)
+        !! Convert single channel output to lappr
+        class(TNoiseMapper), intent(in) :: this
+        !! nosie mapper
+        double precision, intent(in) :: y
+        !! channel sample
+        double precision :: lappr(0:this%bps-1)
+        !! array of LAPPRs
+
+        double precision :: den(0:this%bps-1)
+        double precision :: addendum
+        integer :: i, k
+
+        lappr = 0
+        den   = 0
+
+        do i = 0, this%M-1
+            addendum = this%probabilities(i) * exp(-(y-this%constellation(i))**2/this%N0)
+            do k = 0, this%bps-1
+                if (this%symbol_to_bit_map(i, k)) then
+                    den(k) = den(k) +  addendum
+                else
+                    lappr(k) = lappr(k) + addendum
+                end if
+            end do
+        end do
+
+        do k = 0, this%bps-1
+            if (lappr(k) == 0) then
+                lappr(k) = -1d100
+            elseif (den(k) == 0) then
+                lappr(k) = 1d100
+            else
+                lappr(k) = log(lappr(k)) - log(den(k))
+            end if
+        end do
+    end function y_to_lappr_single
+
+
+    function y_to_lappr_array(this, y) result(lappr)
+        !! Convert array of channel outputs to array of LAPPRs
+        class(TNoiseMapper), intent(in) :: this
+        !! nosie mapper
+        double precision, intent(in) :: y(0:)
+        !! channel samples
+        double precision :: lappr(0:size(y)*this%bps-1)
+        !! array of LAPPRs
+
+        integer :: i
+
+        do i = 0, size(y)-1
+            lappr(i*this%bps : (i+1)*this%bps - 1) = this%y_to_lappr_single(y(i))
+        end do
+    end function y_to_lappr_array
 
 end module re2often_noise_mapper
