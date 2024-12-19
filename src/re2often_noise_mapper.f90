@@ -20,6 +20,7 @@ module re2often_noise_mapper
     !! This module contains all Pulse Amplitude Modulation functionalities
     !! for the Soft Reverse Reconciliation
     use iso_fortran_env, only: dp => real64
+    use stdlib_stats_distribution_normal, only: cdf_normal
     implicit none
 
     private
@@ -43,8 +44,18 @@ module re2often_noise_mapper
         !! Total complex noise variance (Actual on each quadrature is N0/2)
         logical, allocatable :: symbol_to_bit_map(:,:)
         !! Bits (rows) associated to each symbol (row index), size is (0:M-1, 0:bps-1)
+
+        double precision, public, allocatable :: y_thresholds(:)
+        !! Decision thresholds (1:M-1)
+        !! Decision threshold `i` divides the decision
+        !! regions of symbols `i-1` and `i`
+        double precision, public, allocatable :: Fy_thresholds(:)
+        !! Output sample cumulative density function at thresholds (0:M)
+        !! with `Fy_thresholds(0)=`\(F_Y(-\infty)\)
+        !! and  `Fy_thresholds(M)=`\(F_Y(+\infty)\)
     contains
         procedure, public, pass :: free_noise_mapper
+        procedure, public, pass :: deallocate_thresholds
         procedure, public, pass :: random_symbols
         procedure, public, pass :: symbol_index_to_value
         procedure, public, pass :: update_N0
@@ -54,6 +65,7 @@ module re2often_noise_mapper
         procedure, public, pass :: symbol_to_word_single
         procedure, public, pass :: symbol_to_word_array
         generic, public         :: symbol_to_word => symbol_to_word_single, symbol_to_word_array
+        procedure, public, pass :: set_y_thresholds
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -63,6 +75,15 @@ module re2often_noise_mapper
     end interface TNoiseMapper
 contains
 
+    subroutine deallocate_thresholds(this)
+        !! Deallocation of threshold array
+        class(TNoiseMapper), intent(inout) :: this
+        !! noise mapper
+
+        if (allocated(this%y_thresholds )) deallocate(this%y_thresholds)
+        if (allocated(this%Fy_thresholds)) deallocate(this%Fy_thresholds)
+    end subroutine deallocate_thresholds
+
     subroutine free_noise_mapper(nm)
         !! Deallocates all allocatable variables within TNoiseMapper type
         class(TNoiseMapper), intent(inout) :: nm
@@ -71,6 +92,7 @@ contains
         if (allocated(nm%constellation))     deallocate(nm%constellation)
         if (allocated(nm%probabilities))     deallocate(nm%probabilities)
         if (allocated(nm%symbol_to_bit_map)) deallocate(nm%symbol_to_bit_map)
+        call nm%deallocate_thresholds
     end subroutine free_noise_mapper
 
     subroutine TNoiseMapperDestructor(nm)
@@ -124,6 +146,10 @@ contains
                 nm%symbol_to_bit_map(i, k) = iand(ishft(ishft(i, -k)+1, -1), 1) == 1
             end do
         end do
+
+        allocate(nm%y_thresholds(1:nm%M-1))
+        allocate(nm%Fy_thresholds(0:nm%M))
+        call nm%set_y_thresholds(5d-1*(nm%constellation(1:nm%M-1)+nm%constellation(0:nm%M-2)))
     end function TNoiseMapperConstructor
 
 
@@ -257,5 +283,32 @@ contains
             lappr(i*this%bps : (i+1)*this%bps - 1) = this%y_to_lappr_single(y(i))
         end do
     end function y_to_lappr_array
+
+
+    subroutine set_y_thresholds(this, y_thresholds)
+        !! set decision thresholds
+        !! @warning No check on the ordering of the thresholds
+        class(TNoiseMapper), intent(inout) :: this
+        !! noise mapper
+        double precision, intent(in) :: y_thresholds(1:this%M-1)
+        !! Set of thresholds
+
+        double precision :: scale
+        integer          :: i
+
+        scale = sqrt(this%N0/2d0)
+
+        this%y_thresholds = y_thresholds
+        this%Fy_thresholds(1:this%M-1) = 0
+        do i = 0, this%M-1
+            this%Fy_thresholds(1:this%M-1) = this%Fy_thresholds(1:this%M-1) + &
+                this%probabilities(i) * cdf_normal(&
+                x     = y_thresholds, &
+                loc   = this%constellation(i), &
+                scale = scale)
+        end do
+        this%Fy_thresholds(0) = 0
+        this%Fy_thresholds(this%M) = 1
+    end subroutine set_y_thresholds
 
 end module re2often_noise_mapper

@@ -19,6 +19,7 @@ module re2often_noise_mapper_suite
     !!
     !! Test suite for the Noise mapper
     use iso_fortran_env, only: dp => real64
+    use stdlib_stats_distribution_normal, only: cdf_normal
     use re2often_noise_mapper
     use testdrive, only : new_unittest, unittest_type, error_type, check
     implicit none
@@ -38,7 +39,8 @@ contains
             new_unittest("Convert symbol index to constellation point", test_symbol_index_to_value), &
             new_unittest("Convert symbol sequence to word", test_symbol_to_word), &
             new_unittest("Update N0", test_update_N0), &
-            new_unittest("Test LAPPR construction for direct channel", test_y_to_lappr)]
+            new_unittest("Test LAPPR construction for direct channel", test_y_to_lappr),&
+            new_unittest("Test threshold setup and update", test_set_y_thresholds)]
     end subroutine collect_suite
 
 
@@ -225,4 +227,36 @@ contains
             + log(exp(-(y-3)**2/0.5d0) + exp(-(y-1)**2/0.5d0))) &
             .lt. 1d-12))
     end subroutine test_y_to_lappr
+
+
+    subroutine test_set_y_thresholds(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+
+        nm = TNoiseMapper(bps=2, N0=1d0)
+
+        call check(error, all(abs(nm%y_thresholds - real([-2, 0, 2], dp)) .lt. 1d-12))
+        if (allocated(error)) return
+
+        call nm%set_y_thresholds(real([-2.3, 0.15, 1.98], dp))
+
+        call check(error, all(abs(nm%y_thresholds - real([-2.3, 0.15, 1.98], dp)) < 1d-12))
+        if (allocated(error)) return
+        call check(error, nm%Fy_thresholds(0) .lt. 1d-12)
+        if (allocated(error)) return
+        call check(error, nm%Fy_thresholds(nm%M) .gt. (1d0-1d-12))
+        if (allocated(error)) return
+
+
+        nm = TNoiseMapper(bps=1, N0=1d0)
+        call check(error, nm%Fy_thresholds(1), 0.5d0, thr=1d-12)
+        if (allocated(error)) return
+
+        nm = TNoiseMapper(bps=1, N0=1d0, probabilities=real([0.1, 0.9], dp))
+        call check(error, all(abs(nm%Fy_thresholds &
+            - [0d0, &
+            0.9d0 - 0.8d0*cdf_normal(x=1d0, loc=0d0, scale=sqrt(nm%N0/2d0)), &
+            1d0]) .lt. 1d-9))
+    end subroutine test_set_y_thresholds
 end module re2often_noise_mapper_suite
