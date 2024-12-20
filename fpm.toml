@@ -32,6 +32,11 @@ name = "noise-mapper"
 main = "re2often_noise_mapper_main.f90"
 source-dir = "test"
 
+[[test]]
+name = "utils"
+main = "re2often_utils_main.f90"
+source-dir = "test"
+
 [test.dependencies]
 test-drive = { git="https://github.com/fortran-lang/test-drive.git", tag="v0.5.0" }
 
