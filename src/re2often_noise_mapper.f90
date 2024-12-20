@@ -21,6 +21,7 @@ module re2often_noise_mapper
     !! for the Soft Reverse Reconciliation
     use iso_fortran_env, only: dp => real64
     use stdlib_stats_distribution_normal, only: cdf_normal
+    use re2often_utils, only: binsearch
     implicit none
 
     private
@@ -66,6 +67,7 @@ module re2often_noise_mapper
         procedure, public, pass :: symbol_to_word_array
         generic, public         :: symbol_to_word => symbol_to_word_single, symbol_to_word_array
         procedure, public, pass :: set_y_thresholds
+        procedure, public, pass :: decide_symbol
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -310,5 +312,21 @@ contains
         this%Fy_thresholds(0) = 0
         this%Fy_thresholds(this%M) = 1
     end subroutine set_y_thresholds
+
+
+    elemental function decide_symbol(this, y) result (x_i)
+        !! Take a hard decision on the given output symbol based on thresholds
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise Mapper
+        double precision, intent(in)    :: y
+        !! Channel output sample
+        integer :: x_i
+        !! Index of decision region where y belongs to
+
+
+        x_i = binsearch(this%y_thresholds, y)
+    end function decide_symbol
+
+
 
 end module re2often_noise_mapper

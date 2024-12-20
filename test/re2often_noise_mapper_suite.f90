@@ -40,7 +40,8 @@ contains
             new_unittest("Convert symbol sequence to word", test_symbol_to_word), &
             new_unittest("Update N0", test_update_N0), &
             new_unittest("Test LAPPR construction for direct channel", test_y_to_lappr),&
-            new_unittest("Test threshold setup and update", test_set_y_thresholds)]
+            new_unittest("Test threshold setup and update", test_set_y_thresholds), &
+            new_unittest("Test symbol decision", test_decide_symbol)]
     end subroutine collect_suite
 
 
@@ -259,4 +260,28 @@ contains
             0.9d0 - 0.8d0*cdf_normal(x=1d0, loc=0d0, scale=sqrt(nm%N0/2d0)), &
             1d0]) .lt. 1d-9))
     end subroutine test_set_y_thresholds
+
+
+    subroutine test_decide_symbol(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+
+        nm = TNoiseMapper(bps=3, N0=1d0)
+        call check(error, nm%decide_symbol(-9.3d0), 0)
+        if (allocated(error)) return
+        call check(error, nm%decide_symbol(-7.3d0), 0)
+        if (allocated(error)) return
+        call check(error, nm%decide_symbol(-6d0), 1)
+        if (allocated(error)) return
+        call check(error, nm%decide_symbol(-5.9d0), 1)
+        if (allocated(error)) return
+        call check(error, nm%decide_symbol(0d0), 4)
+        if (allocated(error)) return
+        call check(error, nm%decide_symbol(0.2d0), 4)
+        if (allocated(error)) return
+        call check(error, nm%decide_symbol(5.999d0), 6)
+        if (allocated(error)) return
+        call check(error, nm%decide_symbol(6.3d0), 7)
+    end subroutine test_decide_symbol
 end module re2often_noise_mapper_suite
