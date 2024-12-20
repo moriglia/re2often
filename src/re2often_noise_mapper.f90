@@ -68,6 +68,7 @@ module re2often_noise_mapper
         generic, public         :: symbol_to_word => symbol_to_word_single, symbol_to_word_array
         procedure, public, pass :: set_y_thresholds
         procedure, public, pass :: decide_symbol
+        procedure, public, pass :: cdf_y
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -323,10 +324,21 @@ contains
         integer :: x_i
         !! Index of decision region where y belongs to
 
-
         x_i = binsearch(this%y_thresholds, y)
     end function decide_symbol
 
 
+    elemental function cdf_y(this, y) result (Fy)
+        !! Evaluate the cumulative density function of a channel output symbol
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise mapper
+        double precision,   intent(in) :: y
+        !! channel output sample
+        double precision               :: Fy
+        !! CDF of the channel output sample
+
+        Fy = sum(this%probabilities * &
+            cdf_normal(x=y, loc=this%constellation, scale=sqrt(this%N0/2d0)))
+    end function cdf_y
 
 end module re2often_noise_mapper

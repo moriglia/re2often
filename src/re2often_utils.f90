@@ -18,6 +18,7 @@ module re2often_utils
     !! license: GPL-3.0-or-later
     implicit none
 
+    public :: binsearch
 
 contains
     pure function binsearch(vector, y) result (index)

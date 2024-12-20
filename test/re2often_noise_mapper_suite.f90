@@ -41,7 +41,8 @@ contains
             new_unittest("Update N0", test_update_N0), &
             new_unittest("Test LAPPR construction for direct channel", test_y_to_lappr),&
             new_unittest("Test threshold setup and update", test_set_y_thresholds), &
-            new_unittest("Test symbol decision", test_decide_symbol)]
+            new_unittest("Test symbol decision", test_decide_symbol), &
+            new_unittest("Test CDF of output channel", test_cdf_y)]
     end subroutine collect_suite
 
 
@@ -283,5 +284,31 @@ contains
         call check(error, nm%decide_symbol(5.999d0), 6)
         if (allocated(error)) return
         call check(error, nm%decide_symbol(6.3d0), 7)
+        if (allocated(error)) return
+
+        call check(error, &
+            all(nm%decide_symbol(real([-6.1, -2.3, 6.1], dp)) == [0, 2, 7]))
     end subroutine test_decide_symbol
+
+
+    subroutine test_cdf_y(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+
+        nm = TNoiseMapper(bps=1, N0=1d0, probabilities=real([0.1, 0.9], dp))
+        call check(error, &
+            nm%cdf_y(0.734d0), &
+            0.9d0   * cdf_normal(x=.734d0, loc=1d0, scale=sqrt(nm%N0/2d0))   &
+            + 0.1d0 * cdf_normal(x=.734d0, loc=-1d0, scale=sqrt(nm%N0/2d0)), &
+            thr=1d-6)
+        if (allocated(error)) return
+        call check(error, &
+            all(abs(nm%cdf_y([0.734d0, 0d0, 1d0]) - &
+            [ 0.9d0   * cdf_normal(x=.734d0, loc=1d0, scale=sqrt(nm%N0/2d0))   &
+            + 0.1d0 * cdf_normal(x=.734d0, loc=-1d0, scale=sqrt(nm%N0/2d0)),   &
+            0.9d0 - 0.8d0*cdf_normal(x=1d0, loc=0d0, scale=sqrt(nm%N0/2d0)),   &
+            0.9d0 * 0.5d0 + 0.1d0 * cdf_normal(x=1d0, loc=-1d0, scale=sqrt(nm%N0/2d0))])  &
+            .lt. 1d-6))
+    end subroutine test_cdf_y
 end module re2often_noise_mapper_suite
