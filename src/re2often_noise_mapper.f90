@@ -54,6 +54,26 @@ module re2often_noise_mapper
         !! Output sample cumulative density function at thresholds (0:M)
         !! with `Fy_thresholds(0)=`\(F_Y(-\infty)\)
         !! and  `Fy_thresholds(M)=`\(F_Y(+\infty)\)
+        double precision, public, allocatable :: deltaFy(:)
+        !! Probability that the channel output lays in each symbol decision region
+        !! calculated as \(P\{y\in D_i\} = F_Y(\sup D_i) - F_Y(\inf D_i)\)
+        !! where \(D_i\) denotes the decision interval for symbol \(i\), so
+        !! the infimum and sumpremum are the thresholds between symbol \(a_i\) and
+        !! the adjacent symbols
+        logical, public, allocatable          :: negative_monotonicity(:)
+        !! Monotonicity configuration, if true, the softening metric `nhat` decreases
+        !! with `y` increasing in the region corresponding to the index of the configuration vector,
+        !! otherwise `nhat` increases with `y` increasing
+        !! @warning Not implemented: setting a custom configuration
+
+        double precision, private, allocatable :: y_grid(:)
+        !! grid of channel output points `(0:npoints-1)`, with `npoints` not saved as part of this type
+        double precision, private, allocatable :: F_grid(:)
+        !! grid of distribution values corresponding to the `y_grid` points.
+        !! Its range starts from 0, i.e. its range is `(0:npoints-1)`, `npoints` is not saved as part of the type
+
+        ! integer, public, allocatable :: Fy_threshold_index(:)
+        ! !! Index of the threshold within the grid of the CDF values
     contains
         procedure, public, pass :: free_noise_mapper
         procedure, public, pass :: deallocate_thresholds
@@ -67,8 +87,11 @@ module re2often_noise_mapper
         procedure, public, pass :: symbol_to_word_array
         generic, public         :: symbol_to_word => symbol_to_word_single, symbol_to_word_array
         procedure, public, pass :: set_y_thresholds
+        procedure, public, pass :: set_grid
         procedure, public, pass :: decide_symbol
         procedure, public, pass :: cdf_y
+        procedure, public, pass :: generate_soft_metric
+        procedure, public, pass :: generate_tentative_channel_sample
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -85,6 +108,10 @@ contains
 
         if (allocated(this%y_thresholds )) deallocate(this%y_thresholds)
         if (allocated(this%Fy_thresholds)) deallocate(this%Fy_thresholds)
+        if (allocated(this%deltaFy      )) deallocate(this%deltaFy)
+        if (allocated(this%F_grid       )) deallocate(this%F_grid)
+        if (allocated(this%y_grid       )) deallocate(this%y_grid)
+        ! if (allocated(this%Fy_threshold_index)) deallocate(this%Fy_threshold_index)
     end subroutine deallocate_thresholds
 
     subroutine free_noise_mapper(nm)
@@ -96,6 +123,7 @@ contains
         if (allocated(nm%probabilities))     deallocate(nm%probabilities)
         if (allocated(nm%symbol_to_bit_map)) deallocate(nm%symbol_to_bit_map)
         call nm%deallocate_thresholds
+        if (allocated(nm%negative_monotonicity)) deallocate(nm%negative_monotonicity)
     end subroutine free_noise_mapper
 
     subroutine TNoiseMapperDestructor(nm)
@@ -124,7 +152,6 @@ contains
 
         nm%bps = bps
         nm%M = ishft(1, bps)
-        call nm%update_N0(N0)
 
         allocate(nm%constellation(0:nm%M-1))
         allocate(nm%probabilities(0:nm%M-1))
@@ -152,7 +179,16 @@ contains
 
         allocate(nm%y_thresholds(1:nm%M-1))
         allocate(nm%Fy_thresholds(0:nm%M))
-        call nm%set_y_thresholds(5d-1*(nm%constellation(1:nm%M-1)+nm%constellation(0:nm%M-2)))
+        ! allocate(nm%Fy_threshold_index(0:nm%M))
+        allocate(nm%deltaFy(0:nm%M-1))
+
+        call nm%update_N0(N0)
+        ! this will also update the grid and set the thresholds
+
+        allocate(nm%negative_monotonicity(0:nm%M-1))
+        nm%negative_monotonicity(0::2) = .false.
+        nm%negative_monotonicity(1::2) = .true.
+        ! default to alternating configuration
     end function TNoiseMapperConstructor
 
 
@@ -229,6 +265,9 @@ contains
         !! Total noise variance on both quadratures
 
         this%N0 = max(N0, 0d0)
+        call this%set_grid
+        call this%set_y_thresholds(5d-1*(this%constellation(1:this%M-1)+this%constellation(0:this%M-2)))
+        ! Always call set_y_tresholds after set_grid
     end subroutine update_N0
 
 
@@ -291,6 +330,7 @@ contains
     subroutine set_y_thresholds(this, y_thresholds)
         !! set decision thresholds
         !! @warning No check on the ordering of the thresholds
+        ! !! @warning Call after set_grid, because it needs Fy_threshold_index initialized
         class(TNoiseMapper), intent(inout) :: this
         !! noise mapper
         double precision, intent(in) :: y_thresholds(1:this%M-1)
@@ -303,16 +343,57 @@ contains
 
         this%y_thresholds = y_thresholds
         this%Fy_thresholds(1:this%M-1) = 0
-        do i = 0, this%M-1
-            this%Fy_thresholds(1:this%M-1) = this%Fy_thresholds(1:this%M-1) + &
-                this%probabilities(i) * cdf_normal(&
-                x     = y_thresholds, &
-                loc   = this%constellation(i), &
-                scale = scale)
-        end do
+        ! do i = 0, this%M-1
+        !     this%Fy_thresholds(1:this%M-1) = this%Fy_thresholds(1:this%M-1) + &
+        !         this%probabilities(i) * cdf_normal(&
+        !         x     = y_thresholds, &
+        !         loc   = this%constellation(i), &
+        !         scale = scale)
+        ! end do
+        this%Fy_thresholds(1:this%M-1) = this%cdf_y(y_thresholds)
         this%Fy_thresholds(0) = 0
         this%Fy_thresholds(this%M) = 1
+        this%deltaFy = this%Fy_thresholds(1:) - this%Fy_thresholds(:this%M-1)
+
+        ! do i = 1, this%M-1
+        !     this%Fy_threshold_index(i) = binsearch(this%F_grid, this%Fy_thresholds(i))
+        ! end do
+        ! this%Fy_threshold_index(0) = 1
+        ! this%Fy_threshold_index(this%M) = size(this%F_grid) - 1
     end subroutine set_y_thresholds
+
+
+    subroutine set_grid(this, threshold)
+        !! Update grid points
+        class(TNoiseMapper), intent(inout) :: this
+        !! Noise mapper
+        double precision, intent(in), optional :: threshold
+        !! Threshold to consider the distribution as null
+
+        double precision :: y_h, y_l, th
+        integer          :: npoints, i
+
+        if ( present(threshold) .and. (threshold .lt. 1) .and. (threshold .gt. 0)) then
+            th = threshold
+        else
+            th = 1d-6
+        end if
+
+
+        y_h = this%constellation(this%M-1) + sqrt(-this%N0 * (log(th) - log(real(this%M, dp))))
+        y_l = -y_h
+        npoints = ceiling((y_h - y_l)*1000) + 1 ! 2000 points per step, with step = 2 between consecutive constellation points
+
+        if (allocated(this%F_grid)) deallocate(this%F_grid)
+        allocate(this%F_grid(0:npoints-1))
+        if (allocated(this%y_grid)) deallocate(this%y_grid)
+        allocate(this%y_grid(0:npoints-1))
+
+        this%y_grid = [(y_l + real(i, dp)*(y_h-y_l)/real(npoints-1, dp), i = 0, npoints-1)]
+        this%F_grid(1:npoints-2) = this%cdf_y(this%y_grid(1:npoints-2))
+        this%F_grid(0) = 0
+        this%F_grid(npoints-1) = 1
+    end subroutine set_grid
 
 
     elemental function decide_symbol(this, y) result (x_i)
@@ -341,4 +422,62 @@ contains
             cdf_normal(x=y, loc=this%constellation, scale=sqrt(this%N0/2d0)))
     end function cdf_y
 
+
+    elemental subroutine generate_soft_metric(this, y, nhat, xhat_i)
+        !! Generate the softening metric from output sample
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise mapper
+        double precision, intent(in)    :: y
+        !! Channel output sample
+        double precision, intent(out)   :: nhat
+        !! the output soft metric
+        integer, intent(out), optional  :: xhat_i
+        !! The index of the constellation symbol whose decision region `y` belongs to
+
+        integer :: i
+
+        i = binsearch(this%y_thresholds, y)
+        if (this%negative_monotonicity(i)) then
+            nhat = (this%Fy_thresholds(i+1) - this%cdf_y(y))/this%deltaFy(i)
+        else
+            nhat = (this%cdf_y(y) - this%Fy_thresholds(i))/this%deltaFy(i)
+        end if
+
+        if (present(xhat_i)) then
+            xhat_i = i
+        end if
+    end subroutine generate_soft_metric
+
+
+    pure function generate_tentative_channel_sample(this, nhat, xhat_i) result(y)
+        !! Demap the soft metric `nhat` to a channel output `y` in the hypothesis that `xhat_i` was received
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise Mapper
+        double precision, intent(in)    :: nhat
+        !! soft metric generated by Bob
+        integer, intent(in)             :: xhat_i
+        !! hypotetically received symbol
+        double precision                :: y
+        !! channel output whose metric corresponds to `nhat` and whose decision to `xhat_i`
+
+        double precision :: Fy
+        integer          :: i
+
+        if (this%negative_monotonicity(xhat_i)) then
+            Fy = this%Fy_thresholds(xhat_i + 1) - nhat * this%deltaFy(xhat_i)
+        else
+            Fy = this%Fy_thresholds(xhat_i)     + nhat * this%deltaFy(xhat_i)
+        end if
+
+        ! i = this%Fy_threshold_index(xhat_i) + binsearch(&
+        !     this%F_grid(this%Fy_threshold_index(xhat_i) : this%Fy_threshold_index(xhat_i + 1)), &
+        !     Fy)
+
+        i = binsearch(this%F_grid(1:), Fy)
+        ! slower than the commented code above, but easier to deal with
+        ! consider including and testing the indexes of the thresholds
+        ! within the grid for a faster search
+
+        y = this%y_grid(i) + (this%y_grid(i+1) - this%y_grid(i)) * (Fy - this%F_grid(i)) / (this%F_grid(i+1) - this%F_grid(i))
+    end function generate_tentative_channel_sample
 end module re2often_noise_mapper

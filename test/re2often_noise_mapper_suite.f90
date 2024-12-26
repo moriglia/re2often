@@ -42,7 +42,9 @@ contains
             new_unittest("Test LAPPR construction for direct channel", test_y_to_lappr),&
             new_unittest("Test threshold setup and update", test_set_y_thresholds), &
             new_unittest("Test symbol decision", test_decide_symbol), &
-            new_unittest("Test CDF of output channel", test_cdf_y)]
+            new_unittest("Test CDF of output channel", test_cdf_y), &
+            new_unittest("Generation of soft metric", test_generate_soft_metric), &
+            new_unittest("Reconstruction of channel output sample", test_generate_tentative_channel_sample)]
     end subroutine collect_suite
 
 
@@ -311,4 +313,77 @@ contains
             0.9d0 * 0.5d0 + 0.1d0 * cdf_normal(x=1d0, loc=-1d0, scale=sqrt(nm%N0/2d0))])  &
             .lt. 1d-6))
     end subroutine test_cdf_y
+
+
+    subroutine test_generate_soft_metric(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+
+        double precision   :: y(8), nhat(8)
+        integer            :: xhat_i(8), i
+
+        nm = TNoiseMapper(bps=3, N0=1d0)
+
+        y = real([-9.2, -5.2, -2.68, -1.12, 0.2, 2.14, 5.2, 6.47], dp)
+        ! Each element is in  a different decision region
+
+
+        ! Test elemental operation
+        call nm%generate_soft_metric(y, nhat, xhat_i)
+
+        ! Verify decisions
+        do i = 1, 8
+            call check(error, xhat_i(i), i-1)
+            if (allocated(error)) return
+        end do
+
+        ! Verify nhat is in [0, 1]
+        call check(error, all(nhat .le. 1))
+        if (allocated(error)) return
+        call check(error, all(nhat .ge. 0))
+    end subroutine test_generate_soft_metric
+
+
+    subroutine test_generate_tentative_channel_sample(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+
+        double precision   :: y(8), nhat(8), yhat(8)
+        integer            :: xhat_i(8), i
+
+        nm = TNoiseMapper(bps=3, N0=1d0)
+
+        y = real([-9.2, -5.2, -2.68, -1.12, 0.2, 2.14, 5.2, 6.47], dp)
+        ! Each element is in  a different decision region
+
+        ! Test elemental operation
+        call nm%generate_soft_metric(y, nhat, xhat_i)
+
+        ! Verify perfect reconstruction for correct symbols
+        do i = 1, 8
+            yhat(i) = nm%generate_tentative_channel_sample(nhat(i), xhat_i(i))
+        end do
+
+        call check(error, all(abs(yhat-y) .le. 1d-6))
+        if (allocated(error)) return
+
+        ! Add reconstruction tests for boundaries of decision regions
+        call check(error, nm%generate_tentative_channel_sample(1d0, 0), nm%y_thresholds(1), thr=1d-6)
+        if (allocated(error)) return
+        do i = 1, 6
+            ! In the following, the `iend()` addenda flip the monotonicity when needed
+            ! The monotonicity is the default
+            call check(error, nm%generate_tentative_channel_sample(0d0, i), &
+                nm%y_thresholds(i + iand(i, 1)), thr=1d-6)
+            if (allocated(error)) return
+            call check(error, nm%generate_tentative_channel_sample(1d0, i), &
+                nm%y_thresholds(i + 1 - iand(i, 1)), thr=1d-6)
+            if (allocated(error)) return
+        end do
+        call check(error, nm%generate_tentative_channel_sample(1d0, 7), &
+            nm%y_thresholds(7), thr=1d-6)
+    end subroutine test_generate_tentative_channel_sample
+
 end module re2often_noise_mapper_suite
