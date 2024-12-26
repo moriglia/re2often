@@ -9,11 +9,15 @@ auto-executables = false
 auto-examples = false
 auto-tests = false
 
-
 [[executable]]
 name = "direct-reconciliation"
 source-dir = "programs"
 main = "direct_reconciliation.f90"
+
+[[executable]]
+name = "reverse-reconciliation"
+source-dir = "programs"
+main = "reverse_reconciliation.f90"
 
 [executable.dependencies]
 forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
