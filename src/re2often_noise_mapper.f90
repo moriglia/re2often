@@ -505,7 +505,6 @@ contains
         integer :: i ! Possible Index of the received symbol within the alphabet
         integer :: l ! Bit index within symbol
         integer :: k ! Generic constellation index
-        integer :: tmp_index ! temporary index
 
         D(:)     = 0
         lappr(:) = 0
@@ -526,14 +525,12 @@ contains
 
             ! Add the newly calculated lappr component to numerator or denominator
             ! according to the position of the bit within the symbol
-            tmp_index = i
             do l = 0, this%bps-1
-                if ( iand(ishft(tmp_index + 1, -1), 1) == 0 ) then
-                    lappr(l) = lappr(l) + addendum
-                else
+                if ( this%symbol_to_bit_map(i, l) ) then
                     D(l) = D(l) + addendum
+                else
+                    lappr(l) = lappr(l) + addendum
                 end if
-                tmp_index = ishft(tmp_index, -1)
             end do
         end do
 
@@ -558,7 +555,7 @@ contains
         !! array indexes of the transmitted symbols, one per channel use
         double precision, intent(in) :: nhat(0:size(x_i)-1)
         !! array of soft metric data, one per channel use
-        double precision, intent(out) :: lappr(0:this%bps*size(nhat)-1)
+        double precision, intent(out) :: lappr(0:this%bps*size(x_i)-1)
         !! Array of lapprs, `this%bps` elements per channel use
 
         integer :: j
