@@ -44,7 +44,8 @@ contains
             new_unittest("Test symbol decision", test_decide_symbol), &
             new_unittest("Test CDF of output channel", test_cdf_y), &
             new_unittest("Generation of soft metric", test_generate_soft_metric), &
-            new_unittest("Reconstruction of channel output sample", test_generate_tentative_channel_sample)]
+            new_unittest("Reconstruction of channel output sample", test_generate_tentative_channel_sample), &
+            new_unittest("LAPPR generation", test_generate_lappr)]
     end subroutine collect_suite
 
 
@@ -386,4 +387,73 @@ contains
             nm%y_thresholds(7), thr=1d-6)
     end subroutine test_generate_tentative_channel_sample
 
+
+    subroutine test_generate_lappr(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+
+        double precision :: nhat
+        double precision :: lappr_0(2)
+        double precision :: lappr_1(2)
+        double precision :: lappr_2(2)
+        double precision :: lappr_3(2)
+
+        nm = TNoiseMapper(bps=1, N0=0.5d0)
+        nhat = 0.2 ! either y very low or very high
+        call nm%generate_lappr(0, nhat, lappr_0)
+        call nm%generate_lappr(1, nhat, lappr_1)
+        call check(error, abs(lappr_0(1) + lappr_1(1)) .lt. 1d-9)
+        if (allocated(error)) return
+        call check(error, lappr_0(1) .gt. 0)
+        if (allocated(error)) return
+        call check(error, lappr_1(1) .lt. 0)
+        if (allocated(error)) return
+
+        nhat = 0.7
+        call nm%generate_lappr(0, nhat, lappr_2)
+        call nm%generate_lappr(1, nhat, lappr_3)
+        call check(error, abs(lappr_2(1) + lappr_3(1)) .lt. 1d-9)
+        if (allocated(error)) return
+        call check(error, lappr_2(1) .gt. 0)
+        if (allocated(error)) return
+        call check(error, lappr_3(1) .lt. 0)
+        if (allocated(error)) return
+
+        ! Verify that the lappr values with nhat=0.7 have a lower
+        ! absolute value then with nhat=0.2
+        call check(error, lappr_0(1) .gt. lappr_2(1))
+        if (allocated(error)) return
+        call check(error, lappr_1(1) .lt. lappr_3(1))
+        if (allocated(error)) return
+
+        nm = TNoiseMapper(bps=2, N0=1d0)
+        nhat=0.5
+        call nm%generate_lappr(0, nhat, lappr_0)
+        call nm%generate_lappr(1, nhat, lappr_1)
+        call nm%generate_lappr(2, nhat, lappr_2)
+
+        call check(error, all(lappr_0 .gt. 0))
+        if (allocated(error)) return
+        call check(error, (lappr_1(1) .lt. 0) .and. (lappr_1(2) .gt. 0))
+        if (allocated(error)) return
+        call check(error, all(lappr_2 .lt. 0))
+        if (allocated(error)) return
+
+        nhat=0.66
+        call nm%generate_lappr(0, nhat, lappr_0)
+        call nm%generate_lappr(1, nhat, lappr_1)
+        call nm%generate_lappr(2, nhat, lappr_2)
+        call nm%generate_lappr(3, nhat, lappr_3)
+
+        ! Checks on one bit
+        call check(error, abs(lappr_0(2) + lappr_3(2)) .lt. 1d-9)
+        if (allocated(error)) return
+        call check(error, abs(lappr_1(2) + lappr_2(2)) .lt. 1d-9)
+        if (allocated(error)) return
+
+        call check(error, abs(lappr_0(1) - lappr_3(1)) .lt. 1d-9)
+        if (allocated(error)) return
+        call check(error, abs(lappr_1(1) - lappr_2(1)) .lt. 1d-9)
+    end subroutine test_generate_lappr
 end module re2often_noise_mapper_suite
