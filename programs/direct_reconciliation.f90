@@ -140,13 +140,13 @@ program direct_reconciliation
     call sleep(me)
     call system_clock(time_seed)
     seed(1) = mod(seed(1)*sum(seed(me:)), abs(time_seed) + 2) - 12399027
-    seed(2) = 467738 * me * (seed(3) - time_seed) + iand(sum(seed(:me)), time_seed)
+    seed(2) = 467738 * me * (seed(3) - time_seed) + iand(sum(seed(:mod(me, 8))), time_seed)
     seed(3) = (time_seed + me) * (2 + mod(abs(883 + seed(mod(time_seed, 8) + 1)), me)) + &
         mod(sum(seed), max(maxval(seed(:)), 37))
     seed(4) = mod(987654321*time_seed, abs(time_seed - me*me*me) + 3)
     seed(5) = seed(7)/7 - time_seed*me + me ** mod(abs(seed(5)), 29)
     seed(6) = sum(seed(::2) ** abs(time_seed)) + 929812093 / sum(seed(1::2))
-    seed(7) = me * seed(6) * 661242 - me / (seed(6) + time_seed**abs(sum(seed)))
+    seed(7) = me * seed(6) * 661242 - (seed(6) + time_seed**abs(sum(seed))) / me
     seed(8) = time_seed - seed(4)**me + sum(seed(2::2)) ** abs(time_seed) + 329999999/time_seed
     call stdlib_random_seed(sum(seed), time_seed) ! Necessary for the random functions in the stdlib
     call random_seed(put=[me, seed, time_seed])
@@ -234,11 +234,13 @@ program direct_reconciliation
                 exit loop_frame
             end if
         end do loop_frame
-        if ((i_snr .ge. 3) .and. all(b_err(i_snr-2 : i_snr)[1] == 0)) then
-            ! Check again after 10 seconds, so that if new errors pop up from other images, we keep helping them
-            call sleep(10)
-            if ((i_snr .ge. 3) .and. all(b_err(i_snr-2 : i_snr)[1] == 0)) then
-                exit loop_snr
+        if ((i_snr .ge. 3)) then
+            if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
+                ! Check again after 10 seconds, so that if new errors pop up from other images, we keep helping them
+                call sleep(10)
+                if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
+                    exit loop_snr
+                end if
             end if
         end if
     end do loop_snr
