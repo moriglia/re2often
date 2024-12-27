@@ -193,6 +193,10 @@ program reverse_reconciliation
     allocate(f_err(nsnr)[*])
     allocate(f_cnt(nsnr)[*])
 
+    b_err(:) = 0
+    f_err(:) = 0
+    f_cnt(:) = 0
+
     critical
         call from_file(file=tanner_file, into=edge_definition, header=.true.)
     end critical
