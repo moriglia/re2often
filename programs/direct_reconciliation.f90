@@ -234,6 +234,13 @@ program direct_reconciliation
                 exit loop_frame
             end if
         end do loop_frame
+        if ((i_snr .ge. 3) .and. all(b_err(i_snr-2 : i_snr)[1] == 0)) then
+            ! Check again after 10 seconds, so that if new errors pop up from other images, we keep helping them
+            call sleep(10)
+            if ((i_snr .ge. 3) .and. all(b_err(i_snr-2 : i_snr)[1] == 0)) then
+                exit loop_snr
+            end if
+        end if
     end do loop_snr
 
     sync all
