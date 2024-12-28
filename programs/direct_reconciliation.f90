@@ -226,8 +226,9 @@ program direct_reconciliation
                 f_cnt(i_snr)[1]     = f_cnt(i_snr)[1] + 1
             end critical
 
-            if ((f_err(i_snr)[1] .ge. min_ferr) .and. &
-                (f_cnt(i_snr)[1] .ge. min_sim) ) then
+            if (((f_err(i_snr)[1] .ge. min_ferr) .and. &
+                (f_cnt(i_snr)[1] .ge. min_sim)) .or. &
+                (f_cnt(i_snr)[1] .ge. max_sim)) then
                 if (me==1) then
                     call progress_bar%update(current=real(i_snr, 8)/real(nsnr, 8))
                 end if

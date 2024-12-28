@@ -269,19 +269,21 @@ program reverse_reconciliation
                 f_cnt(i_snr)[1]     = f_cnt(i_snr)[1] + 1
             end critical
 
-            if ((f_err(i_snr)[1] .ge. min_ferr) .and. &
-                (f_cnt(i_snr)[1] .ge. min_sim) ) then
+            if (((f_err(i_snr)[1] .ge. min_ferr) .and. &
+                (f_cnt(i_snr)[1] .ge. min_sim)) .or. (f_cnt(i_snr)[1] .ge. max_sim) ) then
                 if (me==1) then
                     call progress_bar%update(current=real(i_snr, 8)/real(nsnr, 8))
                 end if
                 exit loop_frame
             end if
         end do loop_frame
-        if ((i_snr .ge. 3) .and. all(b_err(i_snr-2 : i_snr)[1] == 0)) then
-            ! Check again after 10 seconds, so that if new errors pop up from other images, we keep helping them
-            call sleep(10)
-            if ((i_snr .ge. 3) .and. all(b_err(i_snr-2 : i_snr)[1] == 0)) then
-                exit loop_snr
+        if (i_snr .ge. 3) then
+            if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
+                ! Check again after 10 seconds, so that if new errors pop up from other images, we keep helping them
+                call sleep(10)
+                if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
+                    exit loop_snr
+                end if
             end if
         end if
     end do loop_snr
