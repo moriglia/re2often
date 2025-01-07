@@ -16,9 +16,10 @@
 module re2often_utils
     !! author: Marco Origlia
     !! license: GPL-3.0-or-later
+    use io_fortran_lib, only: to_file
     implicit none
 
-    public :: binsearch
+    public :: binsearch, save_data
 
 contains
     pure function binsearch(vector, y) result (index)
@@ -56,4 +57,87 @@ contains
             index = ishft(index_u + index_l, -1)
         end do
     end function binsearch
+
+
+    subroutine save_data(data, root_dir, bps, isReverse, snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
+        !! Save data in the appropriate directory with a name consistend with simulation parameters
+        double precision, intent(in) :: data(:,:)
+        !! data to be saved in 3 columns: SNR [dB], BER, FER
+        character(*), intent(in) :: root_dir
+        !! Root directory of results without trailing "/"
+        integer, intent(in) :: bps
+        !! Bit per symbol
+        logical, intent(in) :: isReverse
+        !! Indicates whether the results refer to a reverse reconciliation problem
+        double precision, intent(in) :: snr(2)
+        !! Start and stop SNR values
+        integer, intent(in) :: nsnr
+        !! Number of snr points
+        integer, intent(in) :: min_sim
+        !! minimum number of channel realizations
+        integer, intent(in) :: max_sim
+        !! maximum number of channel relizations
+        integer, intent(in) :: max_iter
+        !! maximum number of LDPC iterations
+        integer, intent(in) :: min_ferr
+        !! Number of frame errors to stop the simulation earlier
+
+        character(len=250) :: dir
+        character(len=250) :: fn
+        character(len=500) :: file_name
+
+        call make_directory_and_file_name(root_dir, bps, isReverse, &
+            snr, nsnr, min_sim, max_sim, max_iter, min_ferr,        &
+            dir, fn)
+
+        call execute_command_line("mkdir -p " // trim(dir))
+
+        write(file_name, '(A, "/", A, ".csv")') trim(dir), trim(fn)
+        call to_file(x=data(:,:3), file=trim(file_name), &
+            header=["SNR", "BER", "FER"], fmt="f")
+    end subroutine save_data
+
+
+    subroutine make_directory_and_file_name(root_dir, bps, isReverse, &
+        snr, nsnr, min_sim, max_sim, max_iter, min_ferr, &
+        output_dir, output_file)
+        character(*), intent(in) :: root_dir
+        !! Root directory of results without trailing "/"
+        integer, intent(in) :: bps
+        !! Bit per symbol
+        logical, intent(in) :: isReverse
+        !! Indicates whether the results refer to a reverse reconciliation problem
+        double precision, intent(in) :: snr(2)
+        !! Start and stop SNR values
+        integer, intent(in) :: nsnr
+        !! Number of snr points
+        integer, intent(in) :: min_sim
+        !! minimum number of channel realizations
+        integer, intent(in) :: max_sim
+        !! maximum number of channel relizations
+        integer, intent(in) :: max_iter
+        !! maximum number of LDPC iterations
+        integer, intent(in) :: min_ferr
+        !! Number of frame errors to stop the simulation earlier
+        character(len=250), intent(out) :: output_dir
+        !! Output dir
+        character(len=250), intent(out) :: output_file
+        !! Output file
+
+        output_dir = trim(root_dir) // "/"
+
+        if (isReverse) then
+            output_dir = trim(output_dir) // "rev" ! for reverse
+        else
+            output_dir = trim(output_dir) // "dir" ! for direct
+        end if
+        write(output_dir, '(A, "/bps", I0)') trim(output_dir), bps
+
+
+        write(output_file, '("snr_", 2(SP, F0.3, "_"))') snr(1), snr(2)
+        write(output_file, '(A, I0)') trim(output_file), nsnr
+        write(output_file, '(A, "_it", I0)') trim(output_file), max_iter
+        write(output_file, '(A, "_sim", I4.4, "_", I6.6, "_ferr", I4.4)') trim(output_file), &
+            min_sim, max_sim, min_ferr
+    end subroutine make_directory_and_file_name
 end module re2often_utils

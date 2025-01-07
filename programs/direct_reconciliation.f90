@@ -22,6 +22,7 @@ program direct_reconciliation
     use iso_fortran_env, only: dp => real64
     use ldpc_decoder, only: TDecoder
     use re2often_noise_mapper
+    use re2often_utils, only: save_data, make_directory_and_file_name
     use forbear, only: bar_object
     use stdlib_random, only: stdlib_random_seed => random_seed
     use stdlib_stats_distribution_normal, only: rvs_normal
@@ -31,7 +32,10 @@ program direct_reconciliation
     character(len=500), allocatable :: argv(:)
 
     character(500) :: tanner_file
-    character(500) :: output_file
+    character(500) :: output_root
+    character(250) :: output_dir
+    character(250) :: output_name
+    integer :: io
     double precision :: snr(2)         ! Signal to Noise Ratio in dB
     integer :: nsnr           ! Number of SNR points
     integer :: bps            ! Bits per symbol
@@ -87,7 +91,7 @@ program direct_reconciliation
     min_sim  = 250
     max_iter = 50
     tanner_file = ""
-    output_file = ""
+    output_root = "./res/rate1d2"
 
     i = 1
     do while(i <= argc)
@@ -124,8 +128,8 @@ program direct_reconciliation
             call get_command_argument(i+1, tanner_file)
             i = i + 2
             ! print*, trim(tanner_file)
-        elseif (argv(i) == "--csvout") then
-            call get_command_argument(i+1, output_file)
+        elseif (argv(i) == "--outdir") then
+            call get_command_argument(i+1, output_root)
             i = i + 2
             ! print *, trim(output_file)
         else
@@ -240,6 +244,10 @@ program direct_reconciliation
                 ! Check again after 10 seconds, so that if new errors pop up from other images, we keep helping them
                 call sleep(10)
                 if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
+                    if (me==1) then
+                        call progress_bar%update(current=1d0)
+                        call progress_bar%destroy
+                    end if
                     exit loop_snr
                 end if
             end if
@@ -249,7 +257,15 @@ program direct_reconciliation
     sync all
 
     if (me == 1) then
-        print '(A, T16, A, T32, A, T48, A, T64, A, T80, A)', "SNR [dB]", "F_NUM", "ERR", "BER", "FERR", "FER"
+        call make_directory_and_file_name(output_root, bps, .false., &
+            snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
+            output_dir, output_name)
+        call execute_command_line("mkdir -p " // trim(output_dir))
+        open(newunit=io, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
+            status="replace", action="write")
+
+        write(io, '(A, T16, A, T32, A, T48, A, T64, A, T80, A)') "SNR [dB]", "F_NUM", "ERR", "BER", "FERR", "FER"
+
         do i_snr = 1, nsnr
             if (b_err(i_snr) == 0) then
                 ber(i_snr) = 0
@@ -259,11 +275,13 @@ program direct_reconciliation
                 fer(i_snr) = real(f_err(i_snr), dp)/real(f_cnt(i_snr), dp)
             end if
 
-            print '(f6.3, T16, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)', &
+            write(io,  '(f6.3, T16, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
                 snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
         end do
+        close(io)
 
-        call to_file(x=outdata, file=output_file, header=["SNR", "BER", "FER"], fmt="f")
+        ! call to_file(x=outdata, file=output_file, header=["SNR", "BER", "FER"], fmt="f")
+        call save_data(outdata, output_root, bps, .false., snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
     end if
 
 end program
