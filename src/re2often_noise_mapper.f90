@@ -43,6 +43,8 @@ module re2often_noise_mapper
         !! Symbol Variance
         double precision, public :: N0
         !! Total complex noise variance (Actual on each quadrature is N0/2)
+        double precision, public :: sigma
+        !! sqrt(N0/2)
         logical, allocatable :: symbol_to_bit_map(:,:)
         !! Bits (rows) associated to each symbol (row index), size is (0:M-1, 0:bps-1)
 
@@ -74,9 +76,20 @@ module re2often_noise_mapper
 
         ! integer, public, allocatable :: Fy_threshold_index(:)
         ! !! Index of the threshold within the grid of the CDF values
+
+        double precision, public, allocatable :: fwd_probability(:,:)
+        !! transition probability (TX input to hard RX output), ranges (0:M-1 , 0:M-1)
+        !! Rows represent transmitted symbols, columns received symbols
+        !! \(P\{\hat{X}=a_j|X=a_i\}=\) `fwd_probabilities(i,j)`
+        double precision, public, allocatable :: bwd_probability(:,:)
+        !! transition probability (RX hard decided symbol to possible TX symbol),
+        !! ranges (0:M-1 , 0:M-1)
+        !! Rows represent transmitted symbols, columns received symbols
+        !! \(P\{X=a_i|\hat{X}=a_j\}=\) `bwd_probabilities(i,j)`
     contains
         procedure, public, pass :: free_noise_mapper
         procedure, public, pass :: deallocate_thresholds
+        procedure, public, pass :: deallocate_transition_probabilities
         procedure, public, pass :: random_symbols
         procedure, public, pass :: symbol_index_to_value
         procedure, public, pass :: update_N0
@@ -95,6 +108,7 @@ module re2often_noise_mapper
         procedure, public, pass :: generate_lappr_single
         procedure, public, pass :: generate_lappr_array
         generic, public         :: generate_lappr => generate_lappr_single, generate_lappr_array
+        procedure, public, pass :: update_transition_probabilities
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -117,6 +131,15 @@ contains
         ! if (allocated(this%Fy_threshold_index)) deallocate(this%Fy_threshold_index)
     end subroutine deallocate_thresholds
 
+    subroutine deallocate_transition_probabilities(this)
+        !! Deallocate forward and backward transition probability arrays
+        class(TNoiseMapper), intent(inout) :: this
+        !! noise mapper
+
+        if (allocated(this%fwd_probability)) deallocate(this%fwd_probability)
+        if (allocated(this%bwd_probability)) deallocate(this%bwd_probability)
+    end subroutine deallocate_transition_probabilities
+
     subroutine free_noise_mapper(nm)
         !! Deallocates all allocatable variables within TNoiseMapper type
         class(TNoiseMapper), intent(inout) :: nm
@@ -127,6 +150,7 @@ contains
         if (allocated(nm%symbol_to_bit_map)) deallocate(nm%symbol_to_bit_map)
         call nm%deallocate_thresholds
         if (allocated(nm%negative_monotonicity)) deallocate(nm%negative_monotonicity)
+        call nm%deallocate_transition_probabilities
     end subroutine free_noise_mapper
 
 
@@ -269,9 +293,12 @@ contains
         !! Total noise variance on both quadratures
 
         this%N0 = max(N0, 0d0)
+        this%sigma = sqrt(this%N0/2d0)
         call this%set_grid
         call this%set_y_thresholds(5d-1*(this%constellation(1:this%M-1)+this%constellation(0:this%M-2)))
         ! Always call set_y_tresholds after set_grid
+
+        call this%update_transition_probabilities
     end subroutine update_N0
 
 
@@ -564,4 +591,50 @@ contains
             call this%generate_lappr_single(x_i(j), nhat(j), lappr( j*this%bps : (j+1)*this%bps - 1 ) )
         end do
     end subroutine generate_lappr_array
+
+
+    subroutine update_transition_probabilities(this)
+        !! update the transition probability table between channel inputs and outputs
+        class(TNoiseMapper), intent(inout) :: this
+        !! Noise Mapper
+
+        integer :: i, j
+
+        double precision :: pXhat(0:this%M-1)
+
+        if (.not. allocated(this%fwd_probability)) then
+            allocate(this%fwd_probability(0:this%M-1, 0:this%M-1))
+        end if
+        if (.not. allocated(this%bwd_probability)) then
+            allocate(this%bwd_probability(0:this%M-1, 0:this%M-1))
+        end if
+
+        ! --------------------------------
+        ! Forward transition probabilities
+        ! --------------------------------
+        do i = 0, this%M-1
+            do j = 0, this%M-2
+                this%fwd_probability(i,j) = cdf_normal(&
+                    x=this%y_thresholds(j+1), &
+                    loc=this%constellation(i),&
+                    scale=this%sigma) ! set to CDF at upper bound of the region
+            end do
+            this%fwd_probability(i, this%M-1) = 1d0
+        end do
+        this%fwd_probability(:, 1:this%M-1) = &
+            this%fwd_probability(:, 1:this%M-1) - this%fwd_probability(:, 0:this%M-2)
+        ! remove lower bound, which is upper bound of previous region
+
+        ! ---------------------------------
+        ! Backward transition probabilities
+        ! ---------------------------------
+        do i = 0, this%M-1
+            this%bwd_probability(i, :) = this%fwd_probability(i, :) * this%probabilities(i)
+        end do
+        pXhat = sum(this%bwd_probability, 1)
+        do j = 0, this%M-1
+            this%bwd_probability(:, j) = this%bwd_probability(:, j) / pXhat(j)
+        end do
+    end subroutine update_transition_probabilities
+
 end module re2often_noise_mapper
