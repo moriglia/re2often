@@ -86,6 +86,9 @@ module re2often_noise_mapper
         !! ranges (0:M-1 , 0:M-1)
         !! Rows represent transmitted symbols, columns received symbols
         !! \(P\{X=a_i|\hat{X}=a_j\}=\) `bwd_probabilities(i,j)`
+        double precision, public, allocatable :: lappr_hard(:,:)
+        !! Log-a posteriori-probability ratio for hard reverse reconciliation
+        !! ranges: (0:M-1 , 0:bps-1)
     contains
         procedure, public, pass :: free_noise_mapper
         procedure, public, pass :: deallocate_thresholds
@@ -109,6 +112,10 @@ module re2often_noise_mapper
         procedure, public, pass :: generate_lappr_array
         generic, public         :: generate_lappr => generate_lappr_single, generate_lappr_array
         procedure, public, pass :: update_transition_probabilities
+        procedure, public, pass :: convert_symbol_to_hard_lappr_single
+        procedure, public, pass :: convert_symbol_to_hard_lappr_array
+        generic, public         :: convert_symbol_to_hard_lappr => &
+            convert_symbol_to_hard_lappr_single, convert_symbol_to_hard_lappr_array
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -608,6 +615,9 @@ contains
         if (.not. allocated(this%bwd_probability)) then
             allocate(this%bwd_probability(0:this%M-1, 0:this%M-1))
         end if
+        if (.not. allocated(this%lappr_hard)) then
+            allocate(this%lappr_hard(0:this%M-1, 0:this%bps-1))
+        end if
 
         ! --------------------------------
         ! Forward transition probabilities
@@ -635,6 +645,48 @@ contains
         do j = 0, this%M-1
             this%bwd_probability(:, j) = this%bwd_probability(:, j) / pXhat(j)
         end do
+
+        ! -------------------------------------
+        ! LAPPR for hard reverse reconciliation
+        ! -------------------------------------
+        do i = 0, this%M-1
+            do j = 0, this%bps-1
+                this%lappr_hard(i, j) = &
+                    log(sum(this%fwd_probability(i, :), mask=.not.this%s_to_b(:,j))) - &
+                    log(sum(this%fwd_probability(i, :), mask=this%s_to_b(:,j)))
+            end do
+        end do
     end subroutine update_transition_probabilities
+
+
+    pure subroutine convert_symbol_to_hard_lappr_single(this, x, lappr)
+        !! Generate LAPPR for hard reverse reconciliation from transmitted symbol
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise mapper
+        integer, intent(in) :: x
+        !! transmitted symbol
+        double precision, intent(out) :: lappr(0:this%bps-1)
+        !! LAPPR
+
+        lappr = this%lappr_hard(x, :)
+    end subroutine convert_symbol_to_hard_lappr_single
+
+
+    pure subroutine convert_symbol_to_hard_lappr_array(this, x, lappr)
+        !! Generate LAPPR for hard reverse reconciliation
+        !! from an array of transmitted symbols
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise mapper
+        integer, intent(in) :: x(0:)
+        !! Array of transmitted symbols
+        double precision, intent(out) :: lappr(0:size(x)*this%bps-1)
+        !! array of LAPPRs associated to the input bits
+
+        integer :: i
+
+        do i = 0, size(x) -1
+            lappr(i*this%bps : (i+1)*this%bps-1) = this%lappr_hard(x(i), :)
+        end do
+    end subroutine convert_symbol_to_hard_lappr_array
 
 end module re2often_noise_mapper
