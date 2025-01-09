@@ -145,6 +145,7 @@ contains
 
         if (allocated(this%fwd_probability)) deallocate(this%fwd_probability)
         if (allocated(this%bwd_probability)) deallocate(this%bwd_probability)
+        if (allocated(this%lappr_hard     )) deallocate(this%lappr_hard     )
     end subroutine deallocate_transition_probabilities
 
     subroutine free_noise_mapper(nm)
