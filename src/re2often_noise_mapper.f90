@@ -653,8 +653,8 @@ contains
         do i = 0, this%M-1
             do j = 0, this%bps-1
                 this%lappr_hard(i, j) = &
-                    log(sum(this%fwd_probability(i, :), mask=.not.this%s_to_b(:,j))) - &
-                    log(sum(this%fwd_probability(i, :), mask=this%s_to_b(:,j)))
+                    log(sum(this%fwd_probability(i, :), mask=.not.this%symbol_to_bit_map(:,j))) - &
+                    log(sum(this%fwd_probability(i, :), mask=this%symbol_to_bit_map(:,j)))
             end do
         end do
     end subroutine update_transition_probabilities
