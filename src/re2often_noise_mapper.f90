@@ -412,12 +412,12 @@ contains
         double precision :: y_h, y_l, th
         integer          :: npoints, i
 
-        if ( present(threshold) .and. (threshold .lt. 1) .and. (threshold .gt. 0)) then
-            th = threshold
-        else
-            th = 1d-6
+        th = 1d-6
+        if ( present(threshold) ) then
+            if ((threshold .lt. 1) .and. (threshold .gt. 0)) then
+                th = threshold
+            end if
         end if
-
 
         y_h = this%constellation(this%M-1) + sqrt(-this%N0 * (log(th) - log(real(this%M, dp))))
         y_l = -y_h
