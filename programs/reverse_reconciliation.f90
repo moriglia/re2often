@@ -109,8 +109,8 @@ program reverse_reconciliation
     max_sim  = 10000
     min_sim  = 250
     max_iter = 50
-    tanner_file = ""
-    output_dir  = "."
+    tanner_file = "assets/codes/dvbs2ldpc0.500.csv"
+    output_dir  = "res/rate1d2"
 
     i = 1
     do while(i <= argc)
@@ -147,7 +147,7 @@ program reverse_reconciliation
             call get_command_argument(i+1, tanner_file)
             i = i + 2
             ! print*, trim(tanner_file)
-        elseif (argv(i) == "--dirout") then
+        elseif (argv(i) == "--outdir") then
             call get_command_argument(i+1, output_root)
             i = i + 2
             ! print *, trim(output_file)

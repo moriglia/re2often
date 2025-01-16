@@ -90,7 +90,7 @@ program direct_reconciliation
     max_sim  = 5000
     min_sim  = 250
     max_iter = 50
-    tanner_file = ""
+    tanner_file = "./assets/codes/dvbs2ldpc0.500.csv"
     output_root = "./res/rate1d2"
 
     i = 1
