@@ -110,7 +110,7 @@ program reverse_reconciliation
     min_sim  = 250
     max_iter = 50
     tanner_file = "assets/codes/dvbs2ldpc0.500.csv"
-    output_dir  = "res/rate1d2"
+    output_root  = "res/rate1d2"
 
     i = 1
     do while(i <= argc)
@@ -150,7 +150,6 @@ program reverse_reconciliation
         elseif (argv(i) == "--outdir") then
             call get_command_argument(i+1, output_root)
             i = i + 2
-            ! print *, trim(output_file)
         else
             print *, "Unrecognized argument: ", argv(i)
             stop
@@ -301,7 +300,7 @@ program reverse_reconciliation
     ! +-----------------------------------------+
     sync all
     if (me == 1) then
-        call make_directory_and_file_name(output_root, bps, .false., &
+        call make_directory_and_file_name(output_root, bps, .true., &
             snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
             output_dir, output_name)
         call execute_command_line("mkdir -p " // trim(output_dir))
@@ -324,6 +323,6 @@ program reverse_reconciliation
         close(io)
 
         ! call to_file(x=outdata, file=output_file, header=["SNR", "BER", "FER"], fmt="f")
-        call save_data(outdata, output_root, bps, .false., snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
+        call save_data(outdata, output_root, bps, .true., snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
     end if
 end program reverse_reconciliation
