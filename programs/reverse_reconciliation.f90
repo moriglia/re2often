@@ -46,6 +46,7 @@ program reverse_reconciliation
     integer :: max_sim        ! Maximum simulation loops
     integer :: min_sim        ! Minimum simulation loops
     integer :: max_iter       ! Maximum number of LDPC iterations
+    logical :: isHard         ! Whether to perform hard reverse reconciliation
 
     integer, allocatable :: edge_definition(:,:)
 
@@ -91,6 +92,12 @@ program reverse_reconciliation
     ! generic iteration variables
     integer :: i, i_snr, i_frame
 
+    if (this_image() == 1) then
+        print *, " +-----------------------------------+"
+        print *, " | REVERSE reconciliation simulation |"
+        print *, " +-----------------------------------+"
+    end if
+
     argc = command_argument_count()
     allocate(argv(argc))
 
@@ -111,6 +118,7 @@ program reverse_reconciliation
     max_iter = 50
     tanner_file = "assets/codes/dvbs2ldpc0.500.csv"
     output_root  = "res/rate1d2"
+    isHard = .false.
 
     i = 1
     do while(i <= argc)
@@ -150,6 +158,9 @@ program reverse_reconciliation
         elseif (argv(i) == "--outdir") then
             call get_command_argument(i+1, output_root)
             i = i + 2
+        elseif (argv(i) == "--hard") then
+            isHard = .true.
+            i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
             stop
@@ -253,12 +264,20 @@ program reverse_reconciliation
             y    = rvs_normal(loc=x, scale=sigma)
 
             ! Bob evaluates the soft metric, takes the decisions and evaluates the syndrome
-            call nm%generate_soft_metric(y, nhat, xhat)
+            if (isHard) then
+                xhat = nm%decide_symbol(y)
+            else
+                call nm%generate_soft_metric(y, nhat, xhat)
+            end if
             word = nm%symbol_to_word(xhat)
             synd = decoder%word_to_synd(word)
 
             ! Alice uses the soft metric to find the output
-            call nm%generate_lappr(x_i, nhat, lappr)
+            if (isHard) then
+                call nm%convert_symbol_to_hard_lappr(x_i, lappr)
+            else
+                call nm%generate_lappr(x_i, nhat, lappr)
+            end if
             N_iter = max_iter
             call decoder%decode(lappr, lappr_out, synd, N_iter)
 
@@ -300,7 +319,7 @@ program reverse_reconciliation
     ! +-----------------------------------------+
     sync all
     if (me == 1) then
-        call make_directory_and_file_name(output_root, bps, .true., &
+        call make_directory_and_file_name(output_root, bps, .true., isHard, &
             snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
             output_dir, output_name)
         call execute_command_line("mkdir -p " // trim(output_dir))
@@ -323,6 +342,6 @@ program reverse_reconciliation
         close(io)
 
         ! call to_file(x=outdata, file=output_file, header=["SNR", "BER", "FER"], fmt="f")
-        call save_data(outdata, output_root, bps, .true., snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
+        call save_data(outdata, output_root, bps, .true., isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
     end if
 end program reverse_reconciliation

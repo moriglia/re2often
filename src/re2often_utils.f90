@@ -59,7 +59,7 @@ contains
     end function binsearch
 
 
-    subroutine save_data(data, root_dir, bps, isReverse, snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
+    subroutine save_data(data, root_dir, bps, isReverse, isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
         !! Save data in the appropriate directory with a name consistend with simulation parameters
         double precision, intent(in) :: data(:,:)
         !! data to be saved in 3 columns: SNR [dB], BER, FER
@@ -69,6 +69,9 @@ contains
         !! Bit per symbol
         logical, intent(in) :: isReverse
         !! Indicates whether the results refer to a reverse reconciliation problem
+        logical, intent(in) :: isHard
+        !! Indicates whether the results refer to a hard reverse reconciliation
+        !! (ignored if `isReverse` is `.false.`)
         double precision, intent(in) :: snr(2)
         !! Start and stop SNR values
         integer, intent(in) :: nsnr
@@ -86,7 +89,7 @@ contains
         character(len=250) :: fn
         character(len=500) :: file_name
 
-        call make_directory_and_file_name(root_dir, bps, isReverse, &
+        call make_directory_and_file_name(root_dir, bps, isReverse, isHard, &
             snr, nsnr, min_sim, max_sim, max_iter, min_ferr,        &
             dir, fn)
 
@@ -98,7 +101,7 @@ contains
     end subroutine save_data
 
 
-    subroutine make_directory_and_file_name(root_dir, bps, isReverse, &
+    subroutine make_directory_and_file_name(root_dir, bps, isReverse, isHard, &
         snr, nsnr, min_sim, max_sim, max_iter, min_ferr, &
         output_dir, output_file)
         character(*), intent(in) :: root_dir
@@ -107,6 +110,9 @@ contains
         !! Bit per symbol
         logical, intent(in) :: isReverse
         !! Indicates whether the results refer to a reverse reconciliation problem
+        logical, intent(in) :: isHard
+        !! Indicates whether the results refer to a hard reverse reconciliation
+        !! (ignored if `isReverse` is `.false.`)
         double precision, intent(in) :: snr(2)
         !! Start and stop SNR values
         integer, intent(in) :: nsnr
@@ -127,7 +133,11 @@ contains
         output_dir = trim(root_dir) // "/"
 
         if (isReverse) then
-            output_dir = trim(output_dir) // "rev" ! for reverse
+            if (isHard) then
+                output_dir = trim(output_dir) // "rev-h" ! for reverse hard
+            else
+                output_dir = trim(output_dir) // "rev-s" ! for reverse soft
+            end if
         else
             output_dir = trim(output_dir) // "dir" ! for direct
         end if

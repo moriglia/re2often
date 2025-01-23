@@ -45,7 +45,8 @@ contains
             new_unittest("Test CDF of output channel", test_cdf_y), &
             new_unittest("Generation of soft metric", test_generate_soft_metric), &
             new_unittest("Reconstruction of channel output sample", test_generate_tentative_channel_sample), &
-            new_unittest("LAPPR generation", test_generate_lappr)]
+            new_unittest("LAPPR generation", test_generate_lappr), &
+            new_unittest("Transition probabilities", test_update_transition_probabilities)]
     end subroutine collect_suite
 
 
@@ -456,4 +457,31 @@ contains
         if (allocated(error)) return
         call check(error, abs(lappr_1(1) - lappr_2(1)) .lt. 1d-9)
     end subroutine test_generate_lappr
+
+
+    subroutine test_update_transition_probabilities(error)
+        type(error_type), intent(out), allocatable :: error
+
+        type(TNoiseMapper) :: nm
+        double precision   :: pErr, pCorrect
+        double precision   :: N0, scale
+
+        N0    = 0.5d0
+        scale = 0.5d0
+
+        nm = TNoiseMapper(bps=1, N0=N0)
+
+        pCorrect = cdf_normal(x=1d0, loc=0d0, scale=scale)
+        pErr     = 1-pCorrect
+
+        call check(error, nm%fwd_probability(0,0), pCorrect, thr=1d-9)
+        if (allocated(error)) return
+        call check(error, nm%fwd_probability(1,1), pCorrect, thr=1d-9)
+        if (allocated(error)) return
+
+        call check(error, nm%fwd_probability(0,1), pErr, thr=1d-9)
+        if (allocated(error)) return
+        call check(error, nm%fwd_probability(1,0), pErr, thr=1d-9)
+    end subroutine test_update_transition_probabilities
+
 end module re2often_noise_mapper_suite

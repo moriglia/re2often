@@ -72,6 +72,11 @@ program direct_reconciliation
 
     type(bar_object) :: progress_bar
 
+    if (this_image()==1) then
+        print *, " +----------------------------------+"
+        print *, " | DIRECT reconciliation simulation |"
+        print *, " +----------------------------------+"
+    end if
 
     argc = command_argument_count()
     allocate(argv(argc))
@@ -246,7 +251,6 @@ program direct_reconciliation
                 if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
                     if (me==1) then
                         call progress_bar%update(current=1d0)
-                        call progress_bar%destroy
                     end if
                     exit loop_snr
                 end if
@@ -257,7 +261,8 @@ program direct_reconciliation
     sync all
 
     if (me == 1) then
-        call make_directory_and_file_name(output_root, bps, .false., &
+        call progress_bar%destroy
+        call make_directory_and_file_name(output_root, bps, .false., .false., &
             snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
             output_dir, output_name)
         call execute_command_line("mkdir -p " // trim(output_dir))
@@ -281,7 +286,7 @@ program direct_reconciliation
         close(io)
 
         ! call to_file(x=outdata, file=output_file, header=["SNR", "BER", "FER"], fmt="f")
-        call save_data(outdata, output_root, bps, .false., snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
+        call save_data(outdata, output_root, bps, .false., .false., snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
     end if
 
 end program
