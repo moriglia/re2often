@@ -19,7 +19,7 @@ module re2often_utils
     use io_fortran_lib, only: to_file
     implicit none
 
-    public :: binsearch, save_data
+    public :: binsearch, save_data, make_directory_and_file_name, logical2integer
 
 contains
     pure function binsearch(vector, y) result (index)
@@ -150,4 +150,18 @@ contains
         write(output_file, '(A, "_sim", I4.4, "_", I6.6, "_ferr", I4.4)') trim(output_file), &
             min_sim, max_sim, min_ferr
     end subroutine make_directory_and_file_name
+
+    pure function logical2integer(arr) result(res)
+        logical, intent(in) :: arr(0:)
+        integer :: res
+
+        integer :: i
+
+        res = 0
+        do i = 0, size(arr) - 1
+            if (arr(i)) then
+                res = res + ishft(1, i)
+            end if
+        end do
+    end function logical2integer
 end module re2often_utils

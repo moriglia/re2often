@@ -21,7 +21,7 @@ module re2often_noise_mapper
     !! for the Soft Reverse Reconciliation
     use iso_fortran_env, only: dp => real64
     use stdlib_stats_distribution_normal, only: cdf_normal
-    use re2often_utils, only: binsearch
+    use re2often_utils, only: binsearch, logical2integer
     implicit none
 
     private
@@ -116,6 +116,7 @@ module re2often_noise_mapper
         procedure, public, pass :: convert_symbol_to_hard_lappr_array
         generic, public         :: convert_symbol_to_hard_lappr => &
             convert_symbol_to_hard_lappr_single, convert_symbol_to_hard_lappr_array
+        procedure, public, pass :: print => print_noise_mapper
         final :: TNoiseMapperDestructor
     end type TNoiseMapper
 
@@ -690,4 +691,19 @@ contains
         end do
     end subroutine convert_symbol_to_hard_lappr_array
 
+
+    subroutine print_noise_mapper(this)
+        !! Prints noise mapper details to screen
+        class(TNoiseMapper), intent(in) :: this
+        !! Noise mapper
+
+        integer :: i
+
+        print '(t3, a, t12, a, t33, a, t36, a)', "x_i", "x", "B", "p_i"
+        do i = 0, this%M-1
+            print '(t3, i3, t10, f6.2, t18, b016, t36, f6.4)', &
+                i, this%constellation(i), &
+                logical2integer(this%symbol_to_bit_map(i,:)), this%probabilities(i)
+        end do
+    end subroutine print_noise_mapper
 end module re2often_noise_mapper

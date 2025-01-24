@@ -46,7 +46,9 @@ contains
             new_unittest("Generation of soft metric", test_generate_soft_metric), &
             new_unittest("Reconstruction of channel output sample", test_generate_tentative_channel_sample), &
             new_unittest("LAPPR generation", test_generate_lappr), &
-            new_unittest("Transition probabilities", test_update_transition_probabilities)]
+            new_unittest("Transition probabilities", test_update_transition_probabilities), &
+            new_unittest("Print noise mapper", test_print_noise_mapper) &
+        ]
     end subroutine collect_suite
 
 
@@ -484,4 +486,18 @@ contains
         call check(error, nm%fwd_probability(1,0), pErr, thr=1d-9)
     end subroutine test_update_transition_probabilities
 
+
+    subroutine test_print_noise_mapper(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(TNoiseMapper) :: nm
+
+        nm = TNoiseMapper(bps=3, N0=0.5d0)
+
+        call nm%print
+
+        print *, ""
+        nm = TNoiseMapper(bps=5, N0=0.5d0)
+        call nm%print
+    end subroutine test_print_noise_mapper
 end module re2often_noise_mapper_suite

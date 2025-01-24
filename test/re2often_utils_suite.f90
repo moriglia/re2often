@@ -34,7 +34,8 @@ contains
         type(unittest_type), allocatable, intent(out) :: testsuite(:)
 
         testsuite = [&
-            new_unittest("Binary search", test_binsearch)]
+            new_unittest("Binary search", test_binsearch),&
+            new_unittest("Logical to integer conversion", test_logical2integer)]
     end subroutine collect_suite
 
 
@@ -79,4 +80,32 @@ contains
         if (allocated(error)) return
         call check(error, binsearch(arr31, 32d0), 31)
     end subroutine test_binsearch
+
+
+    subroutine test_logical2integer(error)
+        type(error_type), intent(out), allocatable :: error
+
+        logical :: arr1(0:3)
+        logical :: arr2(0:5)
+
+        arr1 = [.false., .false., .false., .true.]
+        call check(error, logical2integer(arr1) == 8)
+        if (allocated(error)) return
+
+        arr1 = [.false., .true., .true., .false.]
+        call check(error, logical2integer(arr1) == 6)
+        if (allocated(error)) return
+
+        arr2 = [.true., .true., .false., .false., .false., .false.]
+        call check(error, logical2integer(arr2) == 3)
+        if (allocated(error)) return
+
+        arr2 = [.false., .true., .false., .false., .true., .false.]
+        call check(error, logical2integer(arr2) == 18)
+        if (allocated(error)) return
+
+        arr2 = [.false., .true., .false., .false., .true., .true.]
+        call check(error, logical2integer(arr2) == 50)
+    end subroutine test_logical2integer
+
 end module re2often_utils_suite
