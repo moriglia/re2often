@@ -36,7 +36,8 @@ contains
         testsuite = [&
             new_unittest("Constructor", test_constructor), &
             new_unittest("Update N0 from SNR", test_update_N0_from_snrdb), &
-            new_unittest("Direct LAPPR", test_y_to_lappr) &
+            new_unittest("Direct LAPPR", test_y_to_lappr), &
+            new_unittest("Symbol index to value", test_symbol_index_to_value) &
         ]
     end subroutine collect_suite
 
@@ -242,4 +243,21 @@ contains
             exp(-(y(2)-5)/21d0) + exp(-(y(2)-7)/21d0)) , &
             thr=1d-12)
     end subroutine test_y_to_lappr
+
+
+    subroutine test_symbol_index_to_value(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(noisemapper_type) :: nm
+
+        integer(c_int) :: x_i(10)
+        real(c_double) :: x(10)
+
+        nm = noisemapper_create(2)
+
+        x_i = [0, 2, 3, 3, 1, 3, 1, 0, 2, 2]
+        x   = real([-3, 1, 3, 3, -1, 3, -1, -3, 1, 1], c_double)
+
+        call check(error, all(abs(noisemapper_symbol_index_to_value(nm, x_i) - x) .lt. 1d-12))
+    end subroutine test_symbol_index_to_value
 end module re2often_noisemapper_suite

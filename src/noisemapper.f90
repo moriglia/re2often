@@ -194,4 +194,21 @@ contains
         end do
     end subroutine noisemapper_random_symbol_array
 
+
+    function noisemapper_symbol_index_to_value(nm, x_i) result (x)
+        !! Convert constellation index to point
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        integer(c_int), intent(in) :: x_i(:)
+        !! Set of constellation indexes
+        integer(c_double) :: x(size(x_i))
+        !! set of constellation points
+
+        integer :: j
+
+        do j = 1, size(x_i)
+            x = nm%constellation(x_i(j))
+        end do
+    end function noisemapper_symbol_index_to_value
+
 end module noisemapper
