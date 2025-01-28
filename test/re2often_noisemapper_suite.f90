@@ -34,7 +34,8 @@ contains
         type(unittest_type), allocatable, intent(out) :: testsuite(:)
 
         testsuite = [&
-            new_unittest("Constructor", test_constructor) &
+            new_unittest("Constructor", test_constructor), &
+            new_unittest("Update N0 from SNR", test_update_N0_from_snrdb) &
         ]
     end subroutine collect_suite
 
@@ -115,7 +116,7 @@ contains
         call check(error, nm%sigma, sqrt(10.5d0), thr=1d-12)
         if (allocated(error)) return
 
-        call noisemapper_update_N0_from_snrdb(nm, 10d0*log10(2d0))
+        call noisemapper_update_N0_from_snrdb(nm, 10d0*log10(0.5d0))
 
         call check(error, nm%N0, 42d0, thr=1d-12)
         if (allocated(error)) return
