@@ -211,4 +211,21 @@ contains
         end do
     end function noisemapper_symbol_index_to_value
 
+
+    function noisemapper_symbol_to_word(nm, x_i) result (word)
+        !! Convert a set of symbol indexes to a word
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        integer(c_int), intent(in) :: x_i(0:)
+        !! Set of indexes
+        logical(c_bool) :: word(0:size(x_i)*nm%bps - 1)
+        !! Word corresponding to the sequence of symbols
+
+        integer :: j
+
+        do j = 0, size(x_i) - 1
+            word(j*nm%bps : (j+1)*nm%bps-1) = nm%s_to_b(x_i(j), :)
+        end do
+    end function noisemapper_symbol_to_word
+
 end module noisemapper
