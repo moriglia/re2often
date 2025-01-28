@@ -35,7 +35,8 @@ contains
 
         testsuite = [&
             new_unittest("Constructor", test_constructor), &
-            new_unittest("Update N0 from SNR", test_update_N0_from_snrdb) &
+            new_unittest("Update N0 from SNR", test_update_N0_from_snrdb), &
+            new_unittest("Direct LAPPR", test_y_to_lappr) &
         ]
     end subroutine collect_suite
 
@@ -123,4 +124,122 @@ contains
         call check(error, nm%sigma, sqrt(21d0), thr=1d-12)
     end subroutine test_update_N0_from_snrdb
 
+
+    subroutine test_y_to_lappr(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(noisemapper_type) :: nm
+
+        real(c_double) :: lappr(0:8)
+        real(c_double) :: y(0:2)
+
+        y(0) = 2.97d0
+
+        nm = noisemapper_create(3)
+
+        call noisemapper_update_N0_from_snrdb(nm, 0d0)
+        call noisemapper_y_to_lappr(nm, y(0), lappr(0:2))
+
+        call check(error, lappr(0), &
+            log(exp(-(y(0)+7)/21d0) + exp(-(y(0)+1)/21d0) + &
+            exp(-(y(0)-7)/21d0) + exp(-(y(0)-1)/21d0)) - &
+            log(exp(-(y(0)+5)/21d0) + exp(-(y(0)+3)/21d0) + &
+            exp(-(y(0)-5)/21d0) + exp(-(y(0)-3)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        call check(error, lappr(1), &
+            log(exp(-(y(0)+7)/21d0) + exp(-(y(0)+5)/21d0) + &
+            exp(-(y(0)-7)/21d0) + exp(-(y(0)-5)/21d0)) - &
+            log(exp(-(y(0)+1)/21d0) + exp(-(y(0)+3)/21d0) + &
+            exp(-(y(0)-1)/21d0) + exp(-(y(0)-3)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        call check(error, lappr(2), &
+            log(exp(-(y(0)+7)/21d0) + exp(-(y(0)+5)/21d0) + &
+            exp(-(y(0)+3)/21d0) + exp(-(y(0)+1)/21d0)) - &
+            log(exp(-(y(0)-1)/21d0) + exp(-(y(0)-3)/21d0) + &
+            exp(-(y(0)-5)/21d0) + exp(-(y(0)-7)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        y(1:2) = [-3.4d0, 9.1d0]
+
+        ! Re-check y(0)
+        call noisemapper_y_to_lappr(nm, y, lappr)
+        call check(error, lappr(0), &
+            log(exp(-(y(0)+7)/21d0) + exp(-(y(0)+1)/21d0) + &
+            exp(-(y(0)-7)/21d0) + exp(-(y(0)-1)/21d0)) - &
+            log(exp(-(y(0)+5)/21d0) + exp(-(y(0)+3)/21d0) + &
+            exp(-(y(0)-5)/21d0) + exp(-(y(0)-3)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        call check(error, lappr(1), &
+            log(exp(-(y(0)+7)/21d0) + exp(-(y(0)+5)/21d0) + &
+            exp(-(y(0)-7)/21d0) + exp(-(y(0)-5)/21d0)) - &
+            log(exp(-(y(0)+1)/21d0) + exp(-(y(0)+3)/21d0) + &
+            exp(-(y(0)-1)/21d0) + exp(-(y(0)-3)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        call check(error, lappr(2), &
+            log(exp(-(y(0)+7)/21d0) + exp(-(y(0)+5)/21d0) + &
+            exp(-(y(0)+3)/21d0) + exp(-(y(0)+1)/21d0)) - &
+            log(exp(-(y(0)-1)/21d0) + exp(-(y(0)-3)/21d0) + &
+            exp(-(y(0)-5)/21d0) + exp(-(y(0)-7)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+
+        ! check y(1)
+        call check(error, lappr(3), &
+            log(exp(-(y(1)+7)/21d0) + exp(-(y(1)+1)/21d0) + &
+            exp(-(y(1)-7)/21d0) + exp(-(y(1)-1)/21d0)) - &
+            log(exp(-(y(1)+5)/21d0) + exp(-(y(1)+3)/21d0) + &
+            exp(-(y(1)-5)/21d0) + exp(-(y(1)-3)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        call check(error, lappr(4), &
+            log(exp(-(y(1)+7)/21d0) + exp(-(y(1)+5)/21d0) + &
+            exp(-(y(1)-7)/21d0) + exp(-(y(1)-5)/21d0)) - &
+            log(exp(-(y(1)+1)/21d0) + exp(-(y(1)+3)/21d0) + &
+            exp(-(y(1)-1)/21d0) + exp(-(y(1)-3)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        call check(error, lappr(5), &
+            log(exp(-(y(1)+7)/21d0) + exp(-(y(1)+5)/21d0) + &
+            exp(-(y(1)+3)/21d0) + exp(-(y(1)+1)/21d0)) - &
+            log(exp(-(y(1)-1)/21d0) + exp(-(y(1)-3)/21d0) + &
+            exp(-(y(1)-5)/21d0) + exp(-(y(1)-7)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        ! check y(2)
+        call check(error, lappr(6), &
+            log(exp(-(y(2)+7)/21d0) + exp(-(y(2)+1)/21d0) + &
+            exp(-(y(2)-7)/21d0) + exp(-(y(2)-1)/21d0)) - &
+            log(exp(-(y(2)+5)/21d0) + exp(-(y(2)+3)/21d0) + &
+            exp(-(y(2)-5)/21d0) + exp(-(y(2)-3)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        call check(error, lappr(7), &
+            log(exp(-(y(2)+7)/21d0) + exp(-(y(2)+5)/21d0) + &
+            exp(-(y(2)-7)/21d0) + exp(-(y(2)-5)/21d0)) - &
+            log(exp(-(y(2)+1)/21d0) + exp(-(y(2)+3)/21d0) + &
+            exp(-(y(2)-1)/21d0) + exp(-(y(2)-3)/21d0)) , &
+            thr=1d-12)
+        if (allocated(error)) return
+
+        call check(error, lappr(8), &
+            log(exp(-(y(2)+7)/21d0) + exp(-(y(2)+5)/21d0) + &
+            exp(-(y(2)+3)/21d0) + exp(-(y(2)+1)/21d0)) - &
+            log(exp(-(y(2)-1)/21d0) + exp(-(y(2)-3)/21d0) + &
+            exp(-(y(2)-5)/21d0) + exp(-(y(2)-7)/21d0)) , &
+            thr=1d-12)
+    end subroutine test_y_to_lappr
 end module re2often_noisemapper_suite

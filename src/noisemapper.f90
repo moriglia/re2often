@@ -44,6 +44,11 @@ module noisemapper
     end type noisemapper_type
 
 
+    interface noisemapper_y_to_lappr
+        module procedure noisemapper_y_to_lappr_single
+        module procedure noisemapper_y_to_lappr_array
+    end interface noisemapper_y_to_lappr
+
 contains
 
 
@@ -100,4 +105,51 @@ contains
         nm%N0 = nm%E_s * (10d0**(-snrdb/10d0))
         nm%sigma = sqrt(nm%N0/2d0)
     end subroutine noisemapper_update_N0_from_snrdb
+
+
+    subroutine noisemapper_y_to_lappr_single(nm, y, lappr)
+        !! calculate lappr from channel output sample for direct reconciliation
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: y
+        !! AWGN channel output sample
+        real(c_double), intent(out) :: lappr(0:nm%bps - 1)
+        !! log-a posteriori-probabilities for the de-mapped bits
+
+        real(c_double) :: den(0:nm%bps-1)
+        real(c_double) :: addendum
+        integer :: i, k
+
+        den(:)   = 0
+        lappr(:) = 0
+
+        do i = 0, nm%M-1
+            addendum = nm%probabilities(i) * exp(-(y - nm%constellation(i))/nm%N0)
+            do k = 0, nm%bps - 1
+                if (nm%s_to_b(i, k)) then
+                    den(k) = den(k) + addendum
+                else
+                    lappr(k) = lappr(k) + addendum
+                end if
+            end do
+        end do
+        lappr = log(lappr) - log(den)
+    end subroutine noisemapper_y_to_lappr_single
+
+
+    subroutine noisemapper_y_to_lappr_array(nm, y, lappr)
+        !! calculate lappr from set of channel output samples for direct reconciliation
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: y(0:)
+        !! AWGN channel samples
+        real(c_double), intent(out) :: lappr(0:size(y)*nm%bps-1)
+        !! LAPPR corresponding to the channel outputs
+
+        integer :: j
+
+        do j = 0, size(y)-1
+            call noisemapper_y_to_lappr_single(nm, y(j), lappr(j*nm%bps : (j+1)*nm%bps - 1))
+        end do
+    end subroutine noisemapper_y_to_lappr_array
 end module noisemapper
