@@ -33,7 +33,7 @@ library = true
 
 [[test]]
 name = "noise-mapper"
-main = "re2often_noise_mapper_main.f90"
+main = "noisemapper_main.f90"
 source-dir = "test"
 
 [[test]]
