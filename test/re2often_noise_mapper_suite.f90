@@ -225,14 +225,14 @@ contains
         lappr = nm%y_to_lappr(y)
         ! print *, lappr
         call check(error, all(abs(lappr(1::2) &
-            + log(exp(-(y-1)**2/0.5d0) + exp(-(y+1)**2/0.5d0)) &
-            - log(exp(-(y-3)**2/0.5d0) + exp(-(y+3)**2/0.5d0))) &
+            + log(exp(-((y-1)**2)/0.5d0) + exp(-((y+1)**2)/0.5d0)) &
+            - log(exp(-((y-3)**2)/0.5d0) + exp(-((y+3)**2)/0.5d0))) &
             .lt. 1d-12))
         if (allocated(error)) return
 
         call check(error, all(abs(lappr(2::2) &
-            - log(exp(-(y+3)**2/0.5d0) + exp(-(y+1)**2/0.5d0)) &
-            + log(exp(-(y-3)**2/0.5d0) + exp(-(y-1)**2/0.5d0))) &
+            - log(exp(-((y+3)**2)/0.5d0) + exp(-((y+1)**2)/0.5d0)) &
+            + log(exp(-((y-3)**2)/0.5d0) + exp(-((y-1)**2)/0.5d0))) &
             .lt. 1d-12))
     end subroutine test_y_to_lappr
 

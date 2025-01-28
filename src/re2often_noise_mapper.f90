@@ -328,7 +328,7 @@ contains
         den   = 0
 
         do i = 0, this%M-1
-            addendum = this%probabilities(i) * exp(-(y-this%constellation(i))**2/this%N0)
+            addendum = this%probabilities(i) * exp(-((y-this%constellation(i))**2)/this%N0)
             do k = 0, this%bps-1
                 if (this%symbol_to_bit_map(i, k)) then
                     den(k) = den(k) +  addendum
