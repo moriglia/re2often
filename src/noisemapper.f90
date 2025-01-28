@@ -49,6 +49,11 @@ module noisemapper
         module procedure noisemapper_y_to_lappr_array
     end interface noisemapper_y_to_lappr
 
+    interface noisemapper_random_symbol
+        module procedure noisemapper_random_symbol_single
+        module procedure noisemapper_random_symbol_array
+    end interface noisemapper_random_symbol
+
 contains
 
 
@@ -152,4 +157,41 @@ contains
             call noisemapper_y_to_lappr_single(nm, y(j), lappr(j*nm%bps : (j+1)*nm%bps - 1))
         end do
     end subroutine noisemapper_y_to_lappr_array
+
+
+    subroutine noisemapper_random_symbol_single(nm, x_i)
+        !! Generate a random symbol
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        integer(c_int), intent(out) :: x_i
+        !! Random symbol of the constellation (index in 0:M-1)
+
+        double precision :: rnd
+
+        call random_number(rnd) ! rnd is in [0, 1)
+
+        x_i = nm%M-1
+        do i = 0, nm%M-2
+            if (rnd .lt. nm%probabilities(i)) then
+                x_i = i
+                return
+            end if
+            rnd = rnd - nm%probabilities(i)
+        end do
+    end subroutine noisemapper_random_symbol_single
+
+
+    subroutine noisemapper_random_symbol_array(nm, x_i)
+        !! Generate random symbols
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        integer(c_int), intent(out) :: x_i(:)
+        !! Random symbols of the constellation (index in 0:M-1)
+
+        integer :: j
+        do j = 1, size(x_i)
+            call noisemapper_random_symbol_single(nm, x_i(j))
+        end do
+    end subroutine noisemapper_random_symbol_array
+
 end module noisemapper
