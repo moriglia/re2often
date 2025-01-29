@@ -37,7 +37,8 @@ contains
             new_unittest("Constructor", test_constructor), &
             new_unittest("Update N0 from SNR", test_update_N0_from_snrdb), &
             new_unittest("Direct LAPPR", test_y_to_lappr), &
-            new_unittest("Symbol index to value", test_symbol_index_to_value) &
+            new_unittest("Symbol index to value", test_symbol_index_to_value), &
+            new_unittest("Symbol to word", test_symbol_to_word) &
         ]
     end subroutine collect_suite
 
@@ -260,4 +261,69 @@ contains
 
         call check(error, all(abs(noisemapper_symbol_index_to_value(nm, x_i) - x) .lt. 1d-12))
     end subroutine test_symbol_index_to_value
+
+
+    subroutine test_symbol_to_word(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(noisemapper_type) :: nm
+        integer(c_int) :: x_i(10)
+        logical(c_bool):: word(30)
+        logical(c_bool):: word_expected(30)
+
+        nm = noisemapper_create(2)
+        x_i = [0, 2, 3, 1, 1, 0, 3, 1, 2, 2]
+        word_expected(:20) = [&
+            .false., .false.,&
+            .true., .true.,  &
+            .false., .true., &
+            .true., .false., &
+            .true., .false., &
+            .false., .false.,&
+            .false., .true., &
+            .true., .false., &
+            .true., .true.,  &
+            .true., .true.   &
+            ]
+        word(:20) = noisemapper_symbol_to_word(nm, x_i)
+        call check(error, logical(all(word(:20) .eqv. word_expected(:20))))
+        if (allocated(error)) then
+            print *, word(:20)
+            print *, word_expected(:20)
+            return
+        end if
+
+        nm = noisemapper_create(3) ! should call deallocate within
+        x_i = [0, 2, 3, 1, 1, 0, 3, 1, 2, 2]
+        word_expected = [&
+            .false., .false., .false., &
+            .true. , .true. , .false., &
+            .false., .true. , .false., &
+            .true. , .false., .false., &
+            .true. , .false., .false., &
+            .false., .false., .false., &
+            .false., .true. , .false., &
+            .true. , .false., .false., &
+            .true. , .true. , .false., &
+            .true. , .true. , .false.  &
+            ]
+        word = noisemapper_symbol_to_word(nm, x_i)
+        call check(error, logical(all(word .eqv. word_expected)))
+        if (allocated(error)) then
+            print *, word
+            print *, word_expected
+            return
+        end if
+
+        x_i = x_i + 4
+        word_expected(3::3) = .true.
+        word_expected(2::3) = .not. word_expected(2::3)
+        word = noisemapper_symbol_to_word(nm, x_i)
+        call check(error, logical(all(word .eqv. word_expected)))
+        if (allocated(error)) then
+            print *, word
+            print *, word_expected
+            return
+        end if
+    end subroutine test_symbol_to_word
 end module re2often_noisemapper_suite
