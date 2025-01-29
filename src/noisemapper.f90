@@ -167,6 +167,7 @@ contains
         !! Random symbol of the constellation (index in 0:M-1)
 
         double precision :: rnd
+        integer :: i
 
         call random_number(rnd) ! rnd is in [0, 1)
 
@@ -201,13 +202,13 @@ contains
         !! Noise mapper
         integer(c_int), intent(in) :: x_i(:)
         !! Set of constellation indexes
-        integer(c_double) :: x(size(x_i))
+        real(c_double) :: x(size(x_i))
         !! set of constellation points
 
         integer :: j
 
         do j = 1, size(x_i)
-            x = nm%constellation(x_i(j))
+            x(j) = nm%constellation(x_i(j))
         end do
     end function noisemapper_symbol_index_to_value
 
