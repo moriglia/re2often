@@ -19,9 +19,9 @@ program direct_reconciliation
     !!
     !! Perform direct reconciliation
     use io_fortran_lib, only: from_file, to_file
-    use iso_fortran_env, only: dp => real64
+    use iso_c_binding, only: dp => c_double
     use ldpc_decoder, only: TDecoder
-    use re2often_noise_mapper
+    use noisemapper
     use re2often_utils, only: save_data, make_directory_and_file_name
     use forbear, only: bar_object
     use stdlib_random, only: stdlib_random_seed => random_seed
@@ -55,16 +55,14 @@ program direct_reconciliation
     integer, allocatable :: f_err(:)[:]
     integer, allocatable :: f_cnt(:)[:]
 
-    integer, allocatable :: x_i(:)
-    double precision, allocatable :: x(:), y(:), lappr(:), lappr_out(:)
+    integer(c_int), allocatable :: x_i(:)
+    real(c_double), allocatable :: x(:), y(:), lappr(:), lappr_out(:)
     logical, allocatable :: word(:), synd(:)
-    double precision :: new_errors
+    integer :: new_errors
     integer :: K, N_iter
 
     type(TDecoder)     :: decoder
-    type(TNoiseMapper) :: nm
-
-    double precision   :: sigma
+    type(noisemapper_type) :: nm
 
     integer :: i, i_snr, i_frame
     integer :: me, n_im
@@ -196,10 +194,10 @@ program direct_reconciliation
     allocate(lappr(decoder%vnum))
     allocate(lappr_out(decoder%vnum))
 
-    allocate(word(decoder%cnum))
+    allocate(word(decoder%vnum))
     allocate(synd(decoder%cnum))
 
-    nm = TNoiseMapper(bps=bps, N0=1d0)
+    nm = noisemapper_create(bps)
 
     if (me == 1) then
        call progress_bar%initialize(&
@@ -209,18 +207,18 @@ program direct_reconciliation
     end if
 
     loop_snr : do i_snr = 1, nsnr
-        call nm%update_N0(nm%E_symbol * 10d0**(-snrdb(i_snr)/10d0))
-        sigma = sqrt(nm%N0/2)
+        call noisemapper_update_N0_from_snrdb(nm, snrdb(i_snr))
 
         loop_frame : do i_frame = 1, max_sim
-            x_i  = nm%random_symbols()
-            x    = nm%symbol_index_to_value(x_i)
-            word = nm%symbol_to_word(x_i)
+            call noisemapper_random_symbol(nm, x_i)
+            x    = noisemapper_symbol_index_to_value(nm, x_i)
+            word = logical(noisemapper_symbol_to_word(nm, x_i)) ! from logical 1 to logical 4
             synd = decoder%word_to_synd(word)
 
-            y    = rvs_normal(loc=x, scale=sigma)
+            y    = rvs_normal(loc=x, scale=nm%sigma)
 
-            lappr = nm%y_to_lappr(y)
+            call noisemapper_y_to_lappr(nm, y, lappr)
+
 
             N_iter = max_iter
             call decoder%decode(lappr, lappr_out, synd, N_iter)
