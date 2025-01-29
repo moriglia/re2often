@@ -129,7 +129,7 @@ contains
         lappr(:) = 0
 
         do i = 0, nm%M-1
-            addendum = nm%probabilities(i) * exp(-(y - nm%constellation(i))/nm%N0)
+            addendum = nm%probabilities(i) * exp(-(y - nm%constellation(i))**2/nm%N0)
             do k = 0, nm%bps - 1
                 if (nm%s_to_b(i, k)) then
                     den(k) = den(k) + addendum
