@@ -21,7 +21,7 @@ program direct_reconciliation
     use io_fortran_lib, only: from_file, to_file
     use iso_c_binding, only: dp => c_double
     use ldpc_decoder, only: TDecoder
-    use noisemapper
+    use re2often_noisemapper
     use re2often_utils, only: save_data, make_directory_and_file_name
     use forbear, only: bar_object
     use stdlib_random, only: stdlib_random_seed => random_seed

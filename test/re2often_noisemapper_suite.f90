@@ -20,7 +20,7 @@ module re2often_noisemapper_suite
     !! Test suite for the Noise mapper
     use iso_fortran_env, only: dp => real64
     use stdlib_stats_distribution_normal, only: cdf_normal
-    use noisemapper
+    use re2often_noisemapper
     use testdrive, only : new_unittest, unittest_type, error_type, check
     implicit none
 

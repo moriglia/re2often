@@ -13,7 +13,7 @@
 
 !    You should have received a copy of the GNU General Public License
 !    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-module noisemapper
+module re2often_noisemapper
     !! author: Marco Origlia
     !! license: GPL-3.0-or-later
     !!
@@ -229,4 +229,4 @@ contains
         end do
     end function noisemapper_symbol_to_word
 
-end module noisemapper
+end module re2often_noisemapper
