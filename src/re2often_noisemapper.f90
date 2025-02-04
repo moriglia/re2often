@@ -450,4 +450,20 @@ contains
             lappr(i * nm%bps : (i+1) * nm%bps - 1) = nm%reverse_hard_lappr_table(x_i(i), :)
         end do
     end subroutine noisemapper_convert_symbol_to_hard_lappr
+
+
+    ! +---------------------------------------------+
+    ! | REVERSE RECONCILIATION SOFTENING procedures |
+    ! +---------------------------------------------+
+    elemental module function noisemapper_Fy(nm, y) result(Fy)
+        !! Evaluate the CDF of the output at the given point
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: y
+        !! Channel output sample
+        real(c_double) :: Fy
+        !! CDF of the channel output at `y`
+
+        Fy = sum(nm%probabilities * cdf_normal(x=y, loc=nm%constellation, scale=nm%sigma))
+    end function noisemapper_Fy
 end module re2often_noisemapper
