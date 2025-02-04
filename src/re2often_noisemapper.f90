@@ -74,6 +74,13 @@ module re2often_noisemapper
         ! !! Backward transition probabilities (a posteriori probabilities):
         ! !! Location (i, j) contains \(P(X=a_i | \hat{X}=a_j)\)
         ! !! Mind the inversion of indexes with respect to `fwd_probabilities`
+
+        ! +---------------------------------------+
+        ! | Reverse Reconciliation SOFTENING data |
+        ! +---------------------------------------+
+        logical(c_bool), allocatable :: monotonicity_configuration(:)
+        !! Monotonicity configuration `(0:M-1)`: `.false.` means increasing,
+        !! `.true.` means decreasing.
     end type noisemapper_type
 
     ! +--------------------------------------+
@@ -96,6 +103,14 @@ module re2often_noisemapper
         module procedure noisemapper_decide_symbol_single
         module procedure noisemapper_decide_symbol_array
     end interface noisemapper_decide_symbol
+
+    ! +--------------------------------------------+
+    ! | Interfaces for SOFT REVERSE reconciliation |
+    ! +--------------------------------------------+
+    interface noisemapper_generate_soft_metric
+        module procedure noisemapper_generate_soft_metric_single
+        module procedure noisemapper_generate_soft_metric_array
+    end interface noisemapper_generate_soft_metric
 
 contains
 
@@ -466,4 +481,77 @@ contains
 
         Fy = sum(nm%probabilities * cdf_normal(x=y, loc=nm%constellation, scale=nm%sigma))
     end function noisemapper_Fy
+
+
+    module subroutine noisemapper_deallocate_reverse_soft(nm)
+        !! Deallocate data used for soft reverse reconciliation
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+
+        if (allocated(nm%monotonicity_configuration)) deallocate(nm%monotonicity_configuration)
+    end subroutine noisemapper_deallocate_reverse_soft
+
+
+    module subroutine noisemapper_set_monotonicity(nm, config)
+        !! Set monotonicity configuration
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+        logical(c_bool), optional, intent(in) :: config(0:nm%M-1)
+        !! Configuration
+
+        if (allocated(nm%monotonicity_configuration)) then
+            if (size(nm%monotonicity_configuration) /= nm%M) then
+                deallocate(nm%monotonicity_configuration)
+            end if
+        end if
+        if (.not. allocated(nm%monotonicity_configuration)) then
+            allocate(nm%monotonicity_configuration(0:nm%M-1)
+        end if
+        if (present(config)) then
+            nm%monotonicity_configuration = config
+        else
+            nm%monotonicity_configuration(0::2) = .false.
+            nm%monotonicity_configuration(1::2) = .true.
+        end if
+    end subroutine noisemapper_set_monotonicity
+
+
+    module subroutine noisemapper_generate_soft_metric_single(nm, y, n, xhat)
+        !! Generate soft metric from a single channel output sample
+        !! and give the decided symbol, too.
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: y
+        !! Channel output sample
+        real(c_double), intent(out) :: n
+        !! Soft metric
+        real(c_double), intent(out) :: xhat
+        !! decided symbol
+
+        xhat = noisemapper_decide_symbol_single(nm, y)
+
+        n = (noisemapper_Fy(nm, y)- nm%Fy_thresholds(xhat))/nm%delta_Fy(xhat)
+        if (nm%monotonicity_configuration(xhat)) then
+            n = 1d0 - n
+        end if
+    end subroutine noisemapper_generate_soft_metric_single
+
+
+    module subroutine noisemapper_generate_soft_metric_array(nm, y, n, xhat)
+        !! Generate soft metric from a set of channel output samples
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: y(:)
+        !! Channel output sample
+        real(c_double), intent(out) :: n(size(y))
+        !! Soft metric
+        real(c_double), intent(out) :: xhat(size(y))
+        !! decided symbol
+
+        integer :: i
+
+        do i = 1, size(y)
+            call noisemapper_generate_soft_metric_single(nm, y(i), n(i), xhat(i))
+        end do
+    end subroutine noisemapper_generate_soft_metric_array
 end module re2often_noisemapper
