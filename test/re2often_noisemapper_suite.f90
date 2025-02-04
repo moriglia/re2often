@@ -19,6 +19,7 @@ module re2often_noisemapper_suite
     !!
     !! Test suite for the Noise mapper
     use iso_fortran_env, only: dp => real64
+    use iso_c_binding
     use stdlib_stats_distribution_normal, only: cdf_normal
     use re2often_noisemapper
     use testdrive, only : new_unittest, unittest_type, error_type, check
@@ -38,7 +39,9 @@ contains
             new_unittest("Update N0 from SNR", test_update_N0_from_snrdb), &
             new_unittest("Direct LAPPR", test_y_to_lappr), &
             new_unittest("Symbol index to value", test_symbol_index_to_value), &
-            new_unittest("Symbol to word", test_symbol_to_word) &
+            new_unittest("Symbol to word", test_symbol_to_word), &
+            new_unittest("Set y thresholds with defaults", test_set_y_thresholds_default), &
+            new_unittest("Symbol decision", test_decide_symbol) &
         ]
     end subroutine collect_suite
 
@@ -326,4 +329,57 @@ contains
             return
         end if
     end subroutine test_symbol_to_word
+
+    ! +------------------------------------------+
+    ! | REVERSE reconciliation common procedures |
+    ! +------------------------------------------+
+    subroutine test_set_y_thresholds_default(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(noisemapper_type) :: nm
+
+        nm = noisemapper_create(2)
+
+        call noisemapper_update_N0_from_snrdb(nm, 0d0)
+        call noisemapper_set_y_thresholds(nm)
+
+        call check(error, all(abs(nm%y_thresholds - real([-2, 0, 2], c_double)) .lt. 1d-12))
+        if (allocated(error)) return
+
+        call check(error, all(abs(nm%Fy_thresholds(1:3) &
+            - 0.25d0*cdf_normal(loc=-3d0, x=real([-2, 0, 2], c_double), scale=nm%sigma) &
+            - 0.25d0*cdf_normal(loc=-1d0, x=real([-2, 0, 2], c_double), scale=nm%sigma) &
+            - 0.25d0*cdf_normal(loc=+1d0, x=real([-2, 0, 2], c_double), scale=nm%sigma) &
+            - 0.25d0*cdf_normal(loc=+3d0, x=real([-2, 0, 2], c_double), scale=nm%sigma) &
+            ) .lt. 1d-12))
+        if (allocated(error)) return
+
+        call check(error, nm%Fy_thresholds(0), 0d0, thr=1d-12)
+        if (allocated(error)) return
+
+        call check(error, nm%Fy_thresholds(4), 1d0, thr=1d-12)
+    end subroutine test_set_y_thresholds_default
+
+
+    subroutine test_decide_symbol(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(noisemapper_type) :: nm
+        integer :: x_i(10)
+        real(c_double) :: y(10)
+
+        nm = noisemapper_create(3)
+        call noisemapper_update_N0_from_snrdb(nm, 0d0)
+        call noisemapper_set_y_thresholds(nm)
+
+        y = real([-9.2d0, -4.4d0, 6.01d0, 7.2d0, 15.4d0, 0.2d0, 2.05d0, -1.992d0, 1.98d0, -5.976d0], c_double)
+        x_i = noisemapper_decide_symbol(nm, y)
+        call check(error, all(x_i .eq. [0, 1, 7, 7, 7, 4, 5, 3, 4, 1]))
+    end subroutine test_decide_symbol
+
+
+    ! +----------------------------------------+
+    ! | HARD REVERSE reconciliation procedures |
+    ! +----------------------------------------+
+
 end module re2often_noisemapper_suite

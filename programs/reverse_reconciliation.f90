@@ -22,7 +22,8 @@ program reverse_reconciliation
     use io_fortran_lib, only: from_file, to_file
     use stdlib_random, only: stdlib_random_seed => random_seed
     use stdlib_stats_distribution_normal, only: rvs_normal
-    use re2often_noise_mapper, only: TNoiseMapper
+    ! use re2often_noise_mapper, only: TNoiseMapper
+    use re2often_noisemapper
     use re2often_utils, only: save_data, make_directory_and_file_name
     use ldpc_decoder, only: TDecoder
     use forbear, only: bar_object
@@ -84,7 +85,7 @@ program reverse_reconciliation
     double precision :: sigma
 
     type(TDecoder)     :: decoder
-    type(TNoiseMapper) :: nm
+    type(noisemapper_type) :: nm
 
     type(bar_object) :: progress_bar
 
@@ -118,7 +119,7 @@ program reverse_reconciliation
     max_iter = 50
     tanner_file = "assets/codes/dvbs2ldpc0.500.csv"
     output_root  = "res/rate1d2"
-    isHard = .false.
+    isHard = .true.
 
     i = 1
     do while(i <= argc)
@@ -239,7 +240,7 @@ program reverse_reconciliation
     allocate(word(decoder%cnum))
     allocate(synd(decoder%cnum))
 
-    nm = TNoiseMapper(bps=bps, N0=1d0)
+    nm = noisemapper_create(bps)
 
     ! +------------+
     ! | Simulation |
@@ -252,31 +253,34 @@ program reverse_reconciliation
     end if
 
     loop_snr : do i_snr = 1, nsnr
-        call nm%update_N0(nm%E_symbol * 10d0**(-snrdb(i_snr)/10d0))
-        sigma = sqrt(nm%N0/2)
+        call noisemapper_update_N0_from_snrdb(nm, snrdb(i_snr))
+        call noisemapper_set_y_thresholds(nm)
+        if (isHard) then
+            call noisemapper_update_hard_reverse_tables(nm)
+        end if
 
         loop_frame : do i_frame = 1, max_sim
             ! Alice generates random symbols:
-            x_i  = nm%random_symbols()
-            x    = nm%symbol_index_to_value(x_i)
+            call noisemapper_random_symbol(nm, x_i)
+            x = noisemapper_symbol_index_to_value(nm, x_i)
 
             ! AWGN channel
-            y    = rvs_normal(loc=x, scale=sigma)
+            y    = rvs_normal(loc=x, scale=nm%sigma)
 
             ! Bob evaluates the soft metric, takes the decisions and evaluates the syndrome
             if (isHard) then
-                xhat = nm%decide_symbol(y)
+                xhat = noisemapper_decide_symbol(nm, y)
             else
-                call nm%generate_soft_metric(y, nhat, xhat)
+                ! call nm%generate_soft_metric(y, nhat, xhat)
             end if
-            word = nm%symbol_to_word(xhat)
+            word = noisemapper_symbol_to_word(nm, xhat)
             synd = decoder%word_to_synd(word)
 
             ! Alice uses the soft metric to find the output
             if (isHard) then
-                call nm%convert_symbol_to_hard_lappr(x_i, lappr)
+                call noisemapper_convert_symbol_to_hard_lappr(nm, x_i, lappr)
             else
-                call nm%generate_lappr(x_i, nhat, lappr)
+                ! call nm%generate_lappr(x_i, nhat, lappr)
             end if
             N_iter = max_iter
             call decoder%decode(lappr, lappr_out, synd, N_iter)

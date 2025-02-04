@@ -20,8 +20,9 @@ module re2often_noisemapper
     !! Implementation of alphabet utilities and noise mapping/demapping
     !! Mainteining C interoperability
     use, intrinsic :: iso_c_binding
+    use re2often_utils, only: binsearch
+    use stdlib_stats_distribution_normal, only: cdf_normal
     implicit none
-
 
     type :: noisemapper_type
         !! Descriptor for the alphabet and the noise channel
@@ -41,9 +42,43 @@ module re2often_noisemapper
         !! Expected noise variance (on both quadratures)
         real(c_double) :: sigma
         !! standard deviation of noise (only one quadrature)
+
+        ! +-----------------------------+
+        ! | Reverse reconciliation data |
+        ! +-----------------------------+
+        real(c_double), allocatable :: y_thresholds(:)
+        !! Decision thresholds. It ranges from `1` to `M-1`, with
+        !! `1` corresponding to the threshold between symbol `0` and
+        !! symbol `1`
+        real(c_double), allocatable :: Fy_thresholds(:)
+        !! Cumulative Density Function of the channel output at the
+        !! thresholds. It ranges from `0` to `M`, with `Fy_thresholds(0) = 0`,
+        !! `Fy_thresholds(M) = 1`, else `Fy_thresholds(i)` is the CDF
+        !! evaluated at `y_thresholds(i)`
+        real(c_double), allocatable :: delta_Fy(:)
+        !! Probability that the channel output lays in the
+        !! decision region of each symbol
+
+        ! +----------------------------------+
+        ! | Hard reverse reconciliation data |
+        ! +----------------------------------+
+        real(c_double), allocatable :: fwd_probabilities(:,:)
+        !! Forward transition probabilities (likelihoods):
+        !! Location (i, j) contains \(P(\hat{X}=a_j | X=a_i)\)
+        real(c_double), allocatable :: reverse_hard_lappr_table(:,:)
+        !! table of LAPPRs of the received bits given a transmitted symbol.
+        !! Location (i, k) contains the LAPPR(k) given \(X=a_i\).
+        !! `i` ranges in `(0, M)`, `k` ranges in `(0, bps)`
+
+        ! real(c_double), allocatable :: bwd_probabilities(:,:)
+        ! !! Backward transition probabilities (a posteriori probabilities):
+        ! !! Location (i, j) contains \(P(X=a_i | \hat{X}=a_j)\)
+        ! !! Mind the inversion of indexes with respect to `fwd_probabilities`
     end type noisemapper_type
 
-
+    ! +--------------------------------------+
+    ! | Interfaces for DIRECT reconciliation |
+    ! +--------------------------------------+
     interface noisemapper_y_to_lappr
         module procedure noisemapper_y_to_lappr_single
         module procedure noisemapper_y_to_lappr_array
@@ -54,10 +89,18 @@ module re2often_noisemapper
         module procedure noisemapper_random_symbol_array
     end interface noisemapper_random_symbol
 
+    ! +---------------------------------------+
+    ! | Interfaces for REVERSE reconciliation |
+    ! +---------------------------------------+
+    interface noisemapper_decide_symbol
+        module procedure noisemapper_decide_symbol_single
+        module procedure noisemapper_decide_symbol_array
+    end interface noisemapper_decide_symbol
+
 contains
 
 
-    subroutine noisemapper_deallocate(nm)
+    module subroutine noisemapper_deallocate(nm)
         !! Destructor for noise mapper
         type(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
@@ -68,7 +111,7 @@ contains
     end subroutine noisemapper_deallocate
 
 
-    function noisemapper_create(bps) result(nm)
+    module function noisemapper_create(bps) result(nm)
         !! Create the nm object
         integer(c_int), intent(in) :: bps
         !! bit per symbol
@@ -100,7 +143,7 @@ contains
     end function noisemapper_create
 
 
-    subroutine noisemapper_update_N0_from_snrdb(nm, snrdb)
+    module subroutine noisemapper_update_N0_from_snrdb(nm, snrdb)
         !! Update N0 based on the value of the SNR
         type(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
@@ -112,7 +155,7 @@ contains
     end subroutine noisemapper_update_N0_from_snrdb
 
 
-    subroutine noisemapper_y_to_lappr_single(nm, y, lappr)
+    module subroutine noisemapper_y_to_lappr_single(nm, y, lappr)
         !! calculate lappr from channel output sample for direct reconciliation
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
@@ -142,7 +185,7 @@ contains
     end subroutine noisemapper_y_to_lappr_single
 
 
-    subroutine noisemapper_y_to_lappr_array(nm, y, lappr)
+    module subroutine noisemapper_y_to_lappr_array(nm, y, lappr)
         !! calculate lappr from set of channel output samples for direct reconciliation
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
@@ -159,7 +202,7 @@ contains
     end subroutine noisemapper_y_to_lappr_array
 
 
-    subroutine noisemapper_random_symbol_single(nm, x_i)
+    module subroutine noisemapper_random_symbol_single(nm, x_i)
         !! Generate a random symbol
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
@@ -182,7 +225,7 @@ contains
     end subroutine noisemapper_random_symbol_single
 
 
-    subroutine noisemapper_random_symbol_array(nm, x_i)
+    module subroutine noisemapper_random_symbol_array(nm, x_i)
         !! Generate random symbols
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
@@ -196,7 +239,7 @@ contains
     end subroutine noisemapper_random_symbol_array
 
 
-    function noisemapper_symbol_index_to_value(nm, x_i) result (x)
+    module function noisemapper_symbol_index_to_value(nm, x_i) result (x)
         !! Convert constellation index to point
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
@@ -213,7 +256,7 @@ contains
     end function noisemapper_symbol_index_to_value
 
 
-    function noisemapper_symbol_to_word(nm, x_i) result (word)
+    module function noisemapper_symbol_to_word(nm, x_i) result (word)
         !! Convert a set of symbol indexes to a word
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
@@ -229,4 +272,182 @@ contains
         end do
     end function noisemapper_symbol_to_word
 
+    ! +-----------------------------------------+
+    ! | Common reverse reconciliation functions |
+    ! +-----------------------------------------+
+
+    module subroutine noisemapper_deallocate_reverse_common(nm)
+        !! Deallocation of common arrays for reverse reconciliation
+        type(noisemapper_type), intent(inout) :: nm
+        !! noise mapper
+
+        if (allocated(nm%y_thresholds) ) deallocate(nm%y_thresholds)
+        if (allocated(nm%Fy_thresholds)) deallocate(nm%Fy_thresholds)
+        if (allocated(nm%delta_Fy)     ) deallocate(nm%delta_Fy)
+    end subroutine noisemapper_deallocate_reverse_common
+
+
+    module subroutine noisemapper_allocate_reverse_common(nm)
+        !! Allocate the common reverse reconciliation buffers
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+
+        call noisemapper_deallocate_reverse_common(nm)
+
+        allocate(nm%y_thresholds(1:nm%M-1))
+        allocate(nm%Fy_thresholds(0:nm%M))
+        allocate(nm%delta_Fy(0:nm%M-1))
+    end subroutine noisemapper_allocate_reverse_common
+
+
+    module subroutine noisemapper_set_y_thresholds(nm, thresholds)
+        !! Set the decision thresholds
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+        real(c_double), intent(in), optional :: thresholds(1:nm%M-1)
+        !! y thresholds. If not present, the thresholds are the points
+        !! half way between two adjacent constellation points
+        !! @warning The order of the array is not checked
+
+        integer :: i
+
+
+        call noisemapper_allocate_reverse_common(nm)
+
+        ! Set the thresholds
+        if (.not. present(thresholds)) then
+            nm%y_thresholds = (nm%constellation(0:nm%M-2) + nm%constellation(1:nm%M-1))/2d0
+        else
+            nm%y_thresholds = thresholds
+        end if
+
+        ! Set the CDF at each threshold
+        nm%Fy_thresholds(0)    = 0 ! at -\infty
+        nm%Fy_thresholds(nm%M) = 1 ! at +\infty
+        do i = 1, nm%M-1
+            nm%Fy_thresholds(i) = sum( nm%probabilities * cdf_normal(&
+                x    = nm%y_thresholds(i), &
+                loc  = nm%constellation,   &
+                scale= nm%sigma))  ! at y_threshold(i)
+        end do
+
+        ! Set the probability of the channel output being in each decision region
+        nm%delta_Fy = nm%Fy_thresholds(1:nm%M) - nm%Fy_thresholds(0:nm%M-1)
+    end subroutine noisemapper_set_y_thresholds
+
+
+    module function noisemapper_decide_symbol_single(nm, y) result(x_i)
+        !! Take a decision for the received channel output based
+        !! on the thresholds
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: y
+        !! Channel output sample
+        integer(c_int) :: x_i
+        !! Alphabet index of the decided symbol
+
+        x_i = binsearch(nm%y_thresholds, y)
+
+    end function noisemapper_decide_symbol_single
+
+
+    module function noisemapper_decide_symbol_array(nm, y) result(x_i)
+        !! Take a decision for the set of received channel outputs
+        !! based on thresholds
+        type(noisemapper_type), intent(in) :: nm
+        !! Noisemapper
+        real(c_double), intent(in) :: y(:)
+        !! Set of input samples
+        integer(c_int) :: x_i(size(y))
+        !! Decisions
+
+        integer :: i
+
+        do i = 1, size(y)
+            x_i(i) = binsearch(nm%y_thresholds, y(i))
+        end do
+    end function noisemapper_decide_symbol_array
+
+    ! +---------------------------------------+
+    ! | Hard reverse reconciliation functions |
+    ! +---------------------------------------+
+
+    module subroutine noisemapper_deallocate_reverse_hard(nm)
+        !! Deallocate transition probability table and lappr table
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+
+        if (allocated(nm%fwd_probabilities)) deallocate(nm%fwd_probabilities)
+        if (allocated(nm%reverse_hard_lappr_table)) deallocate(nm%reverse_hard_lappr_table)
+    end subroutine noisemapper_deallocate_reverse_hard
+
+
+    module subroutine noisemapper_allocate_reverse_hard(nm)
+        !! Allocate transition probability table and lappr table
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+
+        call noisemapper_deallocate_reverse_hard(nm)
+
+        allocate(nm%fwd_probabilities(0:nm%M-1, 0:nm%M-1))
+        allocate(nm%reverse_hard_lappr_table(0:nm%M-1, 0:nm%bps-1))
+    end subroutine noisemapper_allocate_reverse_hard
+
+
+    module subroutine noisemapper_update_hard_reverse_tables(nm)
+        !! Update hard reverse reconciliation tables
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+
+        integer :: i, j, k
+        real(c_double) :: denominator(0:nm%M-1, 0:nm%bps-1)
+
+        call noisemapper_allocate_reverse_hard(nm)
+
+        do i = 0, nm%M - 1
+            do j = 0, nm%M-2
+                nm%fwd_probabilities(i,j) = cdf_normal(&
+                    x     = nm%y_thresholds(j+1),      &
+                    loc   = nm%constellation(i),       &
+                    scale = nm%sigma                   )
+            end do
+        end do
+        nm%fwd_probabilities(:, nm%M-1) = 1
+        nm%fwd_probabilities(:, 1:nm%M-1) = nm%fwd_probabilities(:, 1:nm%M-1) &
+            - nm%fwd_probabilities(:, 0:nm%M-2)
+
+        denominator(:,:) = 0
+        nm%reverse_hard_lappr_table(:,:) = 0
+        ! do i = 0, nm%M-1 ! transmitted symbol
+        do j = 0, nm%M-1 ! received symbol
+            do k = 0, nm%bps-1 ! received bit
+                if (nm%s_to_b(j, k)) then
+                    denominator(:, k) = denominator(:, k) + nm%fwd_probabilities(:, j)
+                else
+                    nm%reverse_hard_lappr_table(:, k) = &
+                        nm%reverse_hard_lappr_table(:, k) + nm%fwd_probabilities(:, j)
+                end if
+            end do
+        end do
+        ! end do
+
+        nm%reverse_hard_lappr_table = log(nm%reverse_hard_lappr_table) - log(denominator)
+    end subroutine noisemapper_update_hard_reverse_tables
+
+
+    module subroutine noisemapper_convert_symbol_to_hard_lappr(nm, x_i, lappr)
+        !! Get LAPPR for each symbol from the tables
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        integer(c_int), intent(in) :: x_i(0:)
+        !! Transmitted symbols
+        real(c_double), intent(out) :: lappr(0:nm%bps*size(x_i)-1)
+        !! LAPPR array associated with the transmitted sybmols
+
+        integer :: i
+
+        do i = 0, size(x_i) - 1
+            lappr(i * nm%bps : (i+1) * nm%bps - 1) = nm%reverse_hard_lappr_table(x_i(i), :)
+        end do
+    end subroutine noisemapper_convert_symbol_to_hard_lappr
 end module re2often_noisemapper
