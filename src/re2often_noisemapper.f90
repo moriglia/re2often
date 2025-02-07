@@ -119,6 +119,11 @@ module re2often_noisemapper
         module procedure noisemapper_generate_soft_metric_array
     end interface noisemapper_generate_soft_metric
 
+    interface noisemapper_soft_reverse_lappr
+        module procedure noisemapper_soft_reverse_lappr_single
+        module procedure noisemapper_soft_reverse_lappr_array
+    end interface noisemapper_soft_reverse_lappr
+
 contains
 
 
@@ -608,29 +613,92 @@ contains
     end subroutine noisemapper_set_Fy_grids
 
 
-    module function noisemapper_invert_soft_metric(nm, n) result(y)
+    module function noisemapper_invert_soft_metric(nm, n, x_i) result(y)
         !! generate all tentative channel output samples from the received soft metric
         type(noisemapper_type), intent(in) :: nm
         !! noise mapper
         real(c_double), intent(in) :: n
         !! Soft metric
-        real(c_double) :: y(0:nm%M-1)
+        integer(c_int), intent(in) :: x_i
+        !! Hypotetical received symbol alphabet index
+        real(c_double) :: y
         !! Tentative channel output samples
 
         real(c_double) :: Fy
-        integer :: i, idx
+        integer :: idx
 
-        do i = 0, nm%M-1
-            Fy = n
-            if (nm%monotonicity_configuration(i)) then
-                Fy = 1-Fy
-            end if
-            Fy = nm%Fy_thresholds(i) + Fy*nm%delta_Fy(i)
+        Fy = n
+        if (nm%monotonicity_configuration(x_i)) then
+            Fy = 1-Fy
+        end if
+        Fy = nm%Fy_thresholds(x_i) + Fy*nm%delta_Fy(x_i)
 
-            idx = binsearch(nm%Fy_grid, Fy)
+        idx = binsearch(nm%Fy_grid, Fy)
 
-            y(i) = nm%base_y_grid + idx*nm%y_grid_step
-        end do
+        y = nm%base_y_grid + idx*nm%y_grid_step
     end function noisemapper_invert_soft_metric
 
+
+    module subroutine noisemapper_soft_reverse_lappr_single(nm, x_i, n, lappr)
+        !! Calculate the LAPPR from the transmitted symbol and the soft metric
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        integer(c_int), intent(in) :: x_i
+        !! transmitted symbol alphabet index
+        real(c_double), intent(in) :: n
+        !! Soft metric
+        real(c_double), intent(out) :: lappr(0:nm%bps-1)
+        !! LAPPRs
+
+        integer :: i !! alphabet index of tentative received symbol
+        integer :: k !! further alphabet/bit index
+        real(c_double) :: denominator(0:nm%bps-1)
+        real(c_double) :: y, x, addendum
+
+
+        lappr(:) = 0
+        denominator(:) = 0
+
+        x = nm%constellation(x_i)
+
+        do i = 0, nm%M-1
+            twoy = 2*noisemapper_invert_soft_metric(nm, i, n)
+
+            addendum = 0
+            do k = 0, nm%M-1 ! k used as symbol index
+                addendum = addendum + nm%probabilities(k) &
+                    * exp((twoy - x - nm%constellation(k))*(nm%constellation(k) - x)/nm%N0)
+            end do
+            addendum = nm%delta_Fy(i) / addendum
+
+            do k = 0, nm%bps - 1 ! k used as bit index
+                if (nm%s_to_b(i, k)) then
+                    denominator(k) = denominator(k) + addendum
+                else
+                    lappr(k) = lappr(k) + addendum
+            end do
+        end do
+
+
+        lappr = log(lappr) - log(denominator)
+    end function noisemapper_soft_reverse_lappr_single
+
+
+    module subroutine noisemapper_soft_reverse_lappr_array(nm, x_i, n, lappr)
+        !! Calculate the LAPPR from the transmitted symbols and the soft metrics arrays
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        integer(c_int), intent(in) :: x_i(0:)
+        !! transmitted symbol alphabet index
+        real(c_double), intent(in) :: n(0:size(x_i)-1)
+        !! Soft metric
+        real(c_double), intent(out) :: lappr(0:size(x_i)*nm%bps-1)
+        !! LAPPRs
+
+        integer :: i
+
+        do i = 0, size(x_i)-1
+            call noisemapper_soft_reverse_lappr_single(nm, x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1))
+        end do
+    end subroutine noisemapper_soft_reverse_lappr_array
 end module re2often_noisemapper
