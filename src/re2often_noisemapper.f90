@@ -81,6 +81,13 @@ module re2often_noisemapper
         logical(c_bool), allocatable :: monotonicity_configuration(:)
         !! Monotonicity configuration `(0:M-1)`: `.false.` means increasing,
         !! `.true.` means decreasing.
+        real(c_double), allocatable :: Fy_grid(:)
+        !! grid of CDF values taken at equally spaced intervals.
+        !! Note that it is 1-based
+        real(c_double) :: base_y_grid
+        !! First element of the y grid
+        real(c_double) :: y_grid_step
+        !! step of the y grid
     end type noisemapper_type
 
     ! +--------------------------------------+
@@ -489,6 +496,7 @@ contains
         !! Noise mapper
 
         if (allocated(nm%monotonicity_configuration)) deallocate(nm%monotonicity_configuration)
+        if (allocated(nm%Fy_grid)) deallocate(nm%Fy_grid)
     end subroutine noisemapper_deallocate_reverse_soft
 
 
@@ -554,4 +562,75 @@ contains
             call noisemapper_generate_soft_metric_single(nm, y(i), n(i), xhat(i))
         end do
     end subroutine noisemapper_generate_soft_metric_array
+
+
+    module subroutine noisemapper_set_Fy_grids(nm, th)
+        !! Setup the grid for the inverse of the CDF
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+        real(c_double), intent(in), optional :: th
+        !! threshold for the PDF minimum value.
+        !! It must be strictly positive, lower than 1
+        ! integer(c_int), intent(in), optional :: pps
+        ! !! Points per constellation step
+
+        real(c_double) :: threshold
+        ! integer :: points_per_step
+        real(c_double) :: y_start, y_stop
+        integer :: n_points, i
+
+        if (present(th)) then
+            threshold = th
+        else
+            threshold = 1d-9
+        end if
+
+        ! if (present(pps)) then
+        !     points_per_step = pps
+        ! else
+        !     points_per_step = 2000
+        ! end if
+
+        y_stop = nm%constellation(nm%M-1) + sqrt(-2*(nm%sigma**2)*log(threshold))
+        y_start = -y_start
+
+        nm%base_y_grid = y_start
+        nm%y_grid_step = 1d-3
+        n_points = integer(ceil(2*y_stop/nm%y_grid_step))
+
+        if (allocated(nm%Fy_grid)) then
+            deallocate(nm%Fy_grid)
+        end if
+        allocate(nm%Fy_grid(n_points))
+
+        nm%Fy_grid = noisemapper_Fy(nm, &
+            [(nm%base_y_grid + i*nm%y_grid_step, i=1, n_points)])
+    end subroutine noisemapper_set_Fy_grids
+
+
+    module function noisemapper_invert_soft_metric(nm, n) result(y)
+        !! generate all tentative channel output samples from the received soft metric
+        type(noisemapper_type), intent(in) :: nm
+        !! noise mapper
+        real(c_double), intent(in) :: n
+        !! Soft metric
+        real(c_double) :: y(0:nm%M-1)
+        !! Tentative channel output samples
+
+        real(c_double) :: Fy
+        integer :: i, idx
+
+        do i = 0, nm%M-1
+            Fy = n
+            if (nm%monotonicity_configuration(i)) then
+                Fy = 1-Fy
+            end if
+            Fy = nm%Fy_thresholds(i) + Fy*nm%delta_Fy(i)
+
+            idx = binsearch(nm%Fy_grid, Fy)
+
+            y(i) = nm%base_y_grid + idx*nm%y_grid_step
+        end do
+    end function noisemapper_invert_soft_metric
+
 end module re2often_noisemapper
