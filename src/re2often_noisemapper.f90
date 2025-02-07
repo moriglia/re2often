@@ -497,7 +497,7 @@ contains
 
     module subroutine noisemapper_deallocate_reverse_soft(nm)
         !! Deallocate data used for soft reverse reconciliation
-        type(noisemapper_type), intent(in) :: nm
+        type(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
 
         if (allocated(nm%monotonicity_configuration)) deallocate(nm%monotonicity_configuration)
@@ -518,7 +518,7 @@ contains
             end if
         end if
         if (.not. allocated(nm%monotonicity_configuration)) then
-            allocate(nm%monotonicity_configuration(0:nm%M-1)
+            allocate(nm%monotonicity_configuration(0:nm%M-1))
         end if
         if (present(config)) then
             nm%monotonicity_configuration = config
@@ -538,7 +538,7 @@ contains
         !! Channel output sample
         real(c_double), intent(out) :: n
         !! Soft metric
-        real(c_double), intent(out) :: xhat
+        integer(c_int), intent(out) :: xhat
         !! decided symbol
 
         xhat = noisemapper_decide_symbol_single(nm, y)
@@ -558,7 +558,7 @@ contains
         !! Channel output sample
         real(c_double), intent(out) :: n(size(y))
         !! Soft metric
-        real(c_double), intent(out) :: xhat(size(y))
+        integer(c_int), intent(out) :: xhat(size(y))
         !! decided symbol
 
         integer :: i
@@ -601,7 +601,7 @@ contains
 
         nm%base_y_grid = y_start
         nm%y_grid_step = 1d-3
-        n_points = integer(ceil(2*y_stop/nm%y_grid_step))
+        n_points = ceiling(2*y_stop/nm%y_grid_step)
 
         if (allocated(nm%Fy_grid)) then
             deallocate(nm%Fy_grid)
@@ -653,7 +653,7 @@ contains
         integer :: i !! alphabet index of tentative received symbol
         integer :: k !! further alphabet/bit index
         real(c_double) :: denominator(0:nm%bps-1)
-        real(c_double) :: y, x, addendum
+        real(c_double) :: twoy, x, addendum
 
 
         lappr(:) = 0
@@ -662,7 +662,7 @@ contains
         x = nm%constellation(x_i)
 
         do i = 0, nm%M-1
-            twoy = 2*noisemapper_invert_soft_metric(nm, i, n)
+            twoy = 2*noisemapper_invert_soft_metric(nm, n, i)
 
             addendum = 0
             do k = 0, nm%M-1 ! k used as symbol index
@@ -676,12 +676,13 @@ contains
                     denominator(k) = denominator(k) + addendum
                 else
                     lappr(k) = lappr(k) + addendum
+                end if
             end do
         end do
 
 
         lappr = log(lappr) - log(denominator)
-    end function noisemapper_soft_reverse_lappr_single
+    end subroutine noisemapper_soft_reverse_lappr_single
 
 
     module subroutine noisemapper_soft_reverse_lappr_array(nm, x_i, n, lappr)
