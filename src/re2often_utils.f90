@@ -59,7 +59,7 @@ contains
     end function binsearch
 
 
-    subroutine save_data(data, root_dir, bps, isReverse, isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
+    subroutine save_data(data, root_dir, bps, isReverse, isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr, alpha)
         !! Save data in the appropriate directory with a name consistend with simulation parameters
         double precision, intent(in) :: data(:,:)
         !! data to be saved in 3 columns: SNR [dB], BER, FER
@@ -84,14 +84,22 @@ contains
         !! maximum number of LDPC iterations
         integer, intent(in) :: min_ferr
         !! Number of frame errors to stop the simulation earlier
+        double precision, optional, intent(in) :: alpha
+        !! Scaling factor for the LAPPR
 
         character(len=250) :: dir
         character(len=250) :: fn
         character(len=500) :: file_name
 
-        call make_directory_and_file_name(root_dir, bps, isReverse, isHard, &
-            snr, nsnr, min_sim, max_sim, max_iter, min_ferr,        &
-            dir, fn)
+        if (present(alpha)) then
+            call make_directory_and_file_name(root_dir, bps, isReverse, isHard, &
+                snr, nsnr, min_sim, max_sim, max_iter, min_ferr,                &
+                dir, fn, alpha)
+        else
+            call make_directory_and_file_name(root_dir, bps, isReverse, isHard, &
+                snr, nsnr, min_sim, max_sim, max_iter, min_ferr,                &
+                dir, fn)
+        end if
 
         call execute_command_line("mkdir -p " // trim(dir))
 
@@ -103,7 +111,7 @@ contains
 
     subroutine make_directory_and_file_name(root_dir, bps, isReverse, isHard, &
         snr, nsnr, min_sim, max_sim, max_iter, min_ferr, &
-        output_dir, output_file)
+        output_dir, output_file, alpha)
         character(*), intent(in) :: root_dir
         !! Root directory of results without trailing "/"
         integer, intent(in) :: bps
@@ -129,6 +137,8 @@ contains
         !! Output dir
         character(len=250), intent(out) :: output_file
         !! Output file
+        double precision, optional, intent(in) :: alpha
+        !! Scaling coefficient for the LAPPR
 
         output_dir = trim(root_dir) // "/"
 
@@ -149,6 +159,11 @@ contains
         write(output_file, '(A, "_it", I0)') trim(output_file), max_iter
         write(output_file, '(A, "_sim", I4.4, "_", I6.6, "_ferr", I4.4)') trim(output_file), &
             min_sim, max_sim, min_ferr
+
+        if (present(alpha)) then
+            output_dir =  trim(output_dir) // "/alpha"
+            write(output_file, '(A, f8.6)') trim(output_file) // "_a", alpha
+        end if
     end subroutine make_directory_and_file_name
 
     pure function logical2integer(arr) result(res)

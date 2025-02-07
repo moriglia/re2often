@@ -83,6 +83,7 @@ program reverse_reconciliation
     integer :: N_iter     ! Number of iterations at the end of the decoding
 
     double precision :: sigma
+    double precision :: alpha
 
     type(TDecoder)     :: decoder
     type(noisemapper_type) :: nm
@@ -120,6 +121,7 @@ program reverse_reconciliation
     tanner_file = "assets/codes/dvbs2ldpc0.500.csv"
     output_root  = "res/rate1d2"
     isHard = .false.
+    alpha = 1d0
 
     i = 1
     do while(i <= argc)
@@ -162,6 +164,9 @@ program reverse_reconciliation
         elseif (argv(i) == "--hard") then
             isHard = .true.
             i = i + 1
+        elseif (argv(i) == "--alpha") then
+            read(argv(i+1), *) alpha
+            i = i + 2
         else
             print *, "Unrecognized argument: ", argv(i)
             stop
@@ -287,6 +292,7 @@ program reverse_reconciliation
             else
                 call noisemapper_soft_reverse_lappr(nm, x_i, nhat, lappr)
             end if
+            lappr = alpha*lappr
 
             N_iter = max_iter
             call decoder%decode(lappr, lappr_out, synd, N_iter)
@@ -329,9 +335,17 @@ program reverse_reconciliation
     ! +-----------------------------------------+
     sync all
     if (me == 1) then
-        call make_directory_and_file_name(output_root, bps, .true., isHard, &
-            snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
-            output_dir, output_name)
+        if (alpha == 1d0) then
+            call make_directory_and_file_name(output_root, bps, .true., isHard, &
+                snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
+                output_dir, output_name)
+        else
+            call make_directory_and_file_name(output_root, bps, .true., isHard, &
+                snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
+                output_dir, output_name, alpha)
+            print *, trim(output_dir)
+            print *, trim(output_name)
+        end if
         call execute_command_line("mkdir -p " // trim(output_dir))
         open(newunit=io, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
             status="replace", action="write")
@@ -352,6 +366,10 @@ program reverse_reconciliation
         close(io)
 
         ! call to_file(x=outdata, file=output_file, header=["SNR", "BER", "FER"], fmt="f")
-        call save_data(outdata, output_root, bps, .true., isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
+        if (alpha == 1d0) then
+            call save_data(outdata, output_root, bps, .true., isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
+        else
+            call save_data(outdata, output_root, bps, .true., isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr, alpha)
+        end if
     end if
 end program reverse_reconciliation
