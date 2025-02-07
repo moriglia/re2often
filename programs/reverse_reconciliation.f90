@@ -119,7 +119,7 @@ program reverse_reconciliation
     max_iter = 50
     tanner_file = "assets/codes/dvbs2ldpc0.500.csv"
     output_root  = "res/rate1d2"
-    isHard = .true.
+    isHard = .false.
 
     i = 1
     do while(i <= argc)
@@ -241,6 +241,9 @@ program reverse_reconciliation
     allocate(synd(decoder%cnum))
 
     nm = noisemapper_create(bps)
+    if (.not. isHard) then
+        call noisemapper_set_monotonicity(nm)
+    end if
 
     ! +------------+
     ! | Simulation |
@@ -257,6 +260,8 @@ program reverse_reconciliation
         call noisemapper_set_y_thresholds(nm)
         if (isHard) then
             call noisemapper_update_hard_reverse_tables(nm)
+        else
+            call noisemapper_set_Fy_grids(nm)
         end if
 
         loop_frame : do i_frame = 1, max_sim
@@ -271,7 +276,7 @@ program reverse_reconciliation
             if (isHard) then
                 xhat = noisemapper_decide_symbol(nm, y)
             else
-                ! call nm%generate_soft_metric(y, nhat, xhat)
+                call noisemapper_generate_soft_metric(nm, y, nhat, xhat)
             end if
             word = noisemapper_symbol_to_word(nm, xhat)
             synd = decoder%word_to_synd(word)
@@ -280,8 +285,9 @@ program reverse_reconciliation
             if (isHard) then
                 call noisemapper_convert_symbol_to_hard_lappr(nm, x_i, lappr)
             else
-                ! call nm%generate_lappr(x_i, nhat, lappr)
+                call noisemapper_soft_reverse_lappr(nm, x_i, nhat, lappr)
             end if
+
             N_iter = max_iter
             call decoder%decode(lappr, lappr_out, synd, N_iter)
 
