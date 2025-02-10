@@ -702,4 +702,23 @@ contains
             call noisemapper_soft_reverse_lappr_single(nm, x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1))
         end do
     end subroutine noisemapper_soft_reverse_lappr_array
+
+
+    ! +-----------------------------+
+    ! | Uniform probabilities at RX |
+    ! +-----------------------------+
+    module subroutine noisemapper_set_y_thresholds_uniform(nm)
+        !! Set thresholds with uniform decision probabilities
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+
+        integer :: i
+        real(c_double) :: thresholds(1:nm%M-1)
+
+        do i = 1, nm%M-1
+            thresholds(i) = nm%base_y_grid + &
+                nm%y_grid_step * binsearch(nm%Fy_grid, real(i, c_double)/real(nm%M, c_double))
+        end do
+        call noisemapper_set_y_thresholds(nm, thresholds)
+    end subroutine noisemapper_set_y_thresholds_uniform
 end module re2often_noisemapper
