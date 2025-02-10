@@ -48,6 +48,7 @@ program reverse_reconciliation
     integer :: min_sim        ! Minimum simulation loops
     integer :: max_iter       ! Maximum number of LDPC iterations
     logical :: isHard         ! Whether to perform hard reverse reconciliation
+    logical :: uniform_th     ! Whether to set thresholds for uniform output symbols
 
     integer, allocatable :: edge_definition(:,:)
 
@@ -121,6 +122,7 @@ program reverse_reconciliation
     tanner_file = "assets/codes/dvbs2ldpc0.500.csv"
     output_root  = "res/rate1d2"
     isHard = .false.
+    uniform_th = .false.
     alpha = 1d0
 
     i = 1
@@ -167,6 +169,9 @@ program reverse_reconciliation
         elseif (argv(i) == "--alpha") then
             read(argv(i+1), *) alpha
             i = i + 2
+        elseif (argv(i) == "-u") then
+            uniform_th = .true.
+            i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
             stop
@@ -262,11 +267,16 @@ program reverse_reconciliation
 
     loop_snr : do i_snr = 1, nsnr
         call noisemapper_update_N0_from_snrdb(nm, snrdb(i_snr))
-        call noisemapper_set_y_thresholds(nm)
+        if (uniform_th .or. (.not. isHard)) then
+            call noisemapper_set_Fy_grids(nm)
+        end if
+        if (uniform_th) then
+            call noisemapper_set_y_thresholds_uniform(nm)
+        else
+            call noisemapper_set_y_thresholds(nm)
+        end if
         if (isHard) then
             call noisemapper_update_hard_reverse_tables(nm)
-        else
-            call noisemapper_set_Fy_grids(nm)
         end if
 
         loop_frame : do i_frame = 1, max_sim

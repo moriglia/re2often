@@ -41,7 +41,8 @@ contains
             new_unittest("Symbol index to value", test_symbol_index_to_value), &
             new_unittest("Symbol to word", test_symbol_to_word), &
             new_unittest("Set y thresholds with defaults", test_set_y_thresholds_default), &
-            new_unittest("Symbol decision", test_decide_symbol) &
+            new_unittest("Symbol decision", test_decide_symbol), &
+            new_unittest("Uniform thresholds", test_set_y_thresholds_uniform) &
         ]
     end subroutine collect_suite
 
@@ -382,4 +383,28 @@ contains
     ! | HARD REVERSE reconciliation procedures |
     ! +----------------------------------------+
 
+    ! +----------------------------------------+
+    ! | SOFT REVERSE reconciliation procedures |
+    ! +----------------------------------------+
+
+    subroutine test_set_y_thresholds_uniform(error)
+        type(error_type), allocatable, intent(out) :: error
+
+        type(noisemapper_type) :: nm
+        ! integer :: i
+
+        nm = noisemapper_create(3)
+        call noisemapper_update_N0_from_snrdb(nm, 0d0)
+        call noisemapper_set_Fy_grids(nm)
+        call noisemapper_set_y_thresholds_uniform(nm)
+
+        call check(error, all(abs(nm%delta_Fy - 0.125d0) .lt. 1d-6))
+        if (allocated(error)) then
+            print *, nm%Fy_grid(1::1000)
+            print *, "Thresholds: ", nm%y_thresholds
+            print *, "CDF: ", nm%Fy_thresholds
+            print *, "Deltas:", nm%delta_Fy
+            return
+        end if
+    end subroutine test_set_y_thresholds_uniform
 end module re2often_noisemapper_suite
