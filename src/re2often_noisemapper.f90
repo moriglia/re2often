@@ -597,7 +597,7 @@ contains
         ! end if
 
         y_stop = nm%constellation(nm%M-1) + sqrt(-2*(nm%sigma**2)*log(threshold))
-        y_start = -y_start
+        y_start = -y_stop
 
         nm%base_y_grid = y_start
         nm%y_grid_step = 1d-3
