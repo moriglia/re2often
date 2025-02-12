@@ -576,11 +576,8 @@ contains
         real(c_double), intent(in), optional :: th
         !! threshold for the PDF minimum value.
         !! It must be strictly positive, lower than 1
-        ! integer(c_int), intent(in), optional :: pps
-        ! !! Points per constellation step
 
         real(c_double) :: threshold
-        ! integer :: points_per_step
         real(c_double) :: y_start, y_stop
         integer :: n_points, i
 
@@ -589,12 +586,6 @@ contains
         else
             threshold = 1d-9
         end if
-
-        ! if (present(pps)) then
-        !     points_per_step = pps
-        ! else
-        !     points_per_step = 2000
-        ! end if
 
         y_stop = nm%constellation(nm%M-1) + sqrt(-2*(nm%sigma**2)*log(threshold))
         y_start = -y_stop
