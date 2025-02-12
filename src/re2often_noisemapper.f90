@@ -591,7 +591,7 @@ contains
         y_start = -y_stop
 
         nm%base_y_grid = y_start
-        nm%y_grid_step = 1d-3
+        nm%y_grid_step = 5d-4
         n_points = ceiling(2*y_stop/nm%y_grid_step)
 
         if (allocated(nm%Fy_grid)) then
