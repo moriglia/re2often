@@ -398,7 +398,7 @@ contains
         call noisemapper_set_Fy_grids(nm)
         call noisemapper_set_y_thresholds_uniform(nm)
 
-        call check(error, all(abs(nm%delta_Fy - 0.125d0) .lt. 1d-6))
+        call check(error, all(abs(nm%delta_Fy - 0.125d0) .lt. 1d-12))
         if (allocated(error)) then
             print *, nm%Fy_grid(1::1000)
             print *, "Thresholds: ", nm%y_thresholds

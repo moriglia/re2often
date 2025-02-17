@@ -698,6 +698,67 @@ contains
     ! +-----------------------------+
     ! | Uniform probabilities at RX |
     ! +-----------------------------+
+    module function noisemapper_inverse_Fy_search(nm, Fy, res) result (y)
+        !! Find the `y` value whose CDF is `Fy`, within a certain `res`-olution
+        !! on the CDF
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: Fy
+        !! CDF value to be inverted
+        real(c_double), intent(in), optional :: res
+        !! Resolution of the search result
+        real(c_double) :: y
+        !! output channel value whose CDF is `Fy`
+
+        real(c_double) :: y_l, y_h, resolution, Fy_l, Fy_h, Fy_next
+        integer :: i
+
+        ! Setup resolution
+        if (present(res)) then
+            resolution = res
+        else
+            resolution = 1d-12
+        end if
+
+        Fy_l = noisemapper_Fy(nm, 0d0)
+        if (Fy_l .gt. Fy) then
+            y_h = 0
+            y_l = -1
+            Fy_h = Fy_l
+            Fy_l = noisemapper_Fy(nm, y_l)
+            do while (Fy_l .gt. Fy)
+                y_h = y_l
+                y_l = 2*y_l
+                Fy_h = Fy_l
+                Fy_l = noisemapper_Fy(nm, y_l)
+            end do
+        else
+            y_l = 0
+            y_h = 1
+            Fy_h = noisemapper_Fy(nm, y_h)
+            do while (noisemapper_Fy(nm, y_h) .lt. Fy)
+                y_l = y_h
+                y_h = 2*y_h
+                Fy_l = Fy_h
+                Fy_h = noisemapper_Fy(nm, y_h)
+            end do
+        end if
+
+        do while ( (Fy_h-Fy_l) .gt. resolution)
+            y = (y_h + y_l)/2
+            Fy_next = noisemapper_Fy(nm, y)
+            if (Fy_next .gt. Fy) then
+                y_h = y
+                Fy_h = Fy_next
+            else
+                y_l = y
+                Fy_l = Fy_next
+            end if
+        end do
+    end function noisemapper_inverse_Fy_search
+
+
+
     module subroutine noisemapper_set_y_thresholds_uniform(nm)
         !! Set thresholds with uniform decision probabilities
         type(noisemapper_type), intent(inout) :: nm
@@ -707,8 +768,7 @@ contains
         real(c_double) :: thresholds(1:nm%M-1)
 
         do i = 1, nm%M-1
-            thresholds(i) = nm%base_y_grid + &
-                nm%y_grid_step * binsearch(nm%Fy_grid, real(i, c_double)/real(nm%M, c_double))
+            thresholds(i) = noisemapper_inverse_Fy_search(nm, real(i, c_double)/real(nm%M, c_double))
         end do
         call noisemapper_set_y_thresholds(nm, thresholds)
     end subroutine noisemapper_set_y_thresholds_uniform
