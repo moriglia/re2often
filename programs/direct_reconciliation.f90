@@ -200,11 +200,13 @@ program direct_reconciliation
     nm = noisemapper_create(bps)
 
     if (me == 1) then
-       call progress_bar%initialize(&
+        call progress_bar%initialize(&
             filled_char_string='+', prefix_string='SNR points progress |',&
             suffix_string='| ', add_progress_percent=.true.)
-       call progress_bar%start
+        call progress_bar%start
     end if
+
+    sync all
 
     loop_snr : do i_snr = 1, nsnr
         call noisemapper_update_N0_from_snrdb(nm, snrdb(i_snr))
@@ -278,7 +280,7 @@ program direct_reconciliation
                 fer(i_snr) = real(f_err(i_snr), dp)/real(f_cnt(i_snr), dp)
             end if
 
-            write(io,  '(f6.3, T16, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
+            write(io,  '(f10.3, T12, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
                 snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
         end do
         close(io)

@@ -267,9 +267,9 @@ program reverse_reconciliation
 
     loop_snr : do i_snr = 1, nsnr
         call noisemapper_update_N0_from_snrdb(nm, snrdb(i_snr))
-        if (uniform_th .or. (.not. isHard)) then
-            call noisemapper_set_Fy_grids(nm)
-        end if
+        ! if (uniform_th .or. (.not. isHard)) then
+        !     call noisemapper_set_Fy_grids(nm)
+        ! end if
         if (uniform_th) then
             call noisemapper_set_y_thresholds_uniform(nm)
         else
@@ -277,6 +277,8 @@ program reverse_reconciliation
         end if
         if (isHard) then
             call noisemapper_update_hard_reverse_tables(nm)
+        else
+            call noisemapper_set_Fy_grids(nm)
         end if
 
         loop_frame : do i_frame = 1, max_sim
