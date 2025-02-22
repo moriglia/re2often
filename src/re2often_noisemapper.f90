@@ -208,7 +208,16 @@ contains
                 end if
             end do
         end do
-        lappr = log(lappr) - log(den)
+
+        do k = 0, nm%bps - 1
+            if (den(k) == 0) then
+                lappr(k) = 1d100
+            elseif (lappr(k) == 0) then
+                lappr(k) = -1d100
+            else
+                lappr(k) = log(lappr(k)) - log(den(k))
+            end if
+        end do
     end subroutine noisemapper_y_to_lappr_single
 
 
@@ -458,7 +467,18 @@ contains
         end do
         ! end do
 
-        nm%reverse_hard_lappr_table = log(nm%reverse_hard_lappr_table) - log(denominator)
+        do i = 0, nm%M - 1
+            do k = 0, nm%bps-1
+                if (nm%reverse_hard_lappr_table(i, k) == 0) then
+                    nm%reverse_hard_lappr_table(i, k) = -1d100
+                elseif (denominator(i, k) == 0) then
+                    nm%reverse_hard_lappr_table(i, k) = 1d100
+                else
+                    nm%reverse_hard_lappr_table(i, k) = &
+                        log(nm%reverse_hard_lappr_table(i, k)) - log(denominator(i, k))
+                end if
+            end do
+        end do
     end subroutine noisemapper_update_hard_reverse_tables
 
 
@@ -671,8 +691,15 @@ contains
             end do
         end do
 
-
-        lappr = log(lappr) - log(denominator)
+        do k = 0, nm%bps - 1
+            if (denominator(k) == 0) then
+                lappr(k) = 1d100
+            elseif (lappr(k) == 0) then
+                lappr(k) = -1d100
+            else
+                lappr(k) = log(lappr(k)) - log(denominator(k))
+            end if
+        end do
     end subroutine noisemapper_soft_reverse_lappr_single
 
 
