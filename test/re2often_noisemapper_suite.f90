@@ -42,7 +42,8 @@ contains
             new_unittest("Symbol to word", test_symbol_to_word), &
             new_unittest("Set y thresholds with defaults", test_set_y_thresholds_default), &
             new_unittest("Symbol decision", test_decide_symbol), &
-            new_unittest("Uniform thresholds", test_set_y_thresholds_uniform) &
+            new_unittest("Uniform thresholds", test_set_y_thresholds_uniform), &
+            new_unittest("Updating hard reverse tables", test_update_hard_reverse_tables) &
         ]
     end subroutine collect_suite
 
@@ -382,6 +383,55 @@ contains
     ! +----------------------------------------+
     ! | HARD REVERSE reconciliation procedures |
     ! +----------------------------------------+
+    subroutine test_update_hard_reverse_tables(error)
+        type(error_type), intent(out), allocatable :: error
+
+        type(noisemapper_type) :: nm
+
+        real(c_double) :: expected_fwd_probabilities(0:3, 0:3)
+        real(c_double) :: lappr(0:3, 0:1)
+
+        expected_fwd_probabilities(0, :) = [&
+            0.5252145144244474558297375491370065728192500182699798233838532661210d0, &
+            0.5752422538174825758814623829596760887808663791466477872130479493522d0, &
+            0.6240851829770753587556776230869932810586012821925373391955078065342d0, &
+            1.0d0]
+        expected_fwd_probabilities(1, :) = [&
+            0.4747854855755525441702624508629934271807499817300201766161467338789d0, &
+            0.5252145144244474558297375491370065728192500182699798233838532661210d0, &
+            0.5752422538174825758814623829596760887808663791466477872130479493522d0, &
+            1.0d0]
+        expected_fwd_probabilities(2, :) = [&
+            0.4247577461825174241185376170403239112191336208533522127869520506477d0, &
+            0.4747854855755525441702624508629934271807499817300201766161467338789d0, &
+            0.5252145144244474558297375491370065728192500182699798233838532661210d0, &
+            1.0d0]
+        expected_fwd_probabilities(3, :) = [&
+            0.3759148170229246412443223769130067189413987178074626608044921934657d0, &
+            0.4247577461825174241185376170403239112191336208533522127869520506477d0, &
+            0.4747854855755525441702624508629934271807499817300201766161467338789d0, &
+            1.0d0]
+
+        expected_fwd_probabilities(:,1:) = expected_fwd_probabilities(:, 1:) - &
+            expected_fwd_probabilities(:, :2)
+
+
+        nm = noisemapper_create(2)
+
+        call noisemapper_update_N0_from_snrdb(nm, -20d0)
+        call noisemapper_set_y_thresholds(nm)
+        call noisemapper_update_hard_reverse_tables(nm)
+
+        call check(error, all(abs(nm%fwd_probabilities - expected_fwd_probabilities) .lt. 1d-12))
+        if (allocated(error)) return
+
+        lappr(:, 0) = log(expected_fwd_probabilities(:, 0) + expected_fwd_probabilities(:, 3)) - &
+            log(expected_fwd_probabilities(:, 1) + expected_fwd_probabilities(:, 2))
+        lappr(:, 1) = log(expected_fwd_probabilities(:, 0) + expected_fwd_probabilities(:, 1)) - &
+            log(expected_fwd_probabilities(:, 2) + expected_fwd_probabilities(:, 3))
+
+        call check(error, all(abs(nm%reverse_hard_lappr_table - lappr) .lt. 1d-12))
+    end subroutine test_update_hard_reverse_tables
 
     ! +----------------------------------------+
     ! | SOFT REVERSE reconciliation procedures |
