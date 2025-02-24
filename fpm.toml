@@ -22,7 +22,7 @@ main = "reverse_reconciliation.f90"
 [executable.dependencies]
 forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
 IO-Fortran-Library = { git="https://github.com/acbbullock/IO-Fortran-Library", branch="main" }
-fldpc = { git="https://github.com/moriglia/fldpc", tag="v1.0" }
+fldpc = { git="https://github.com/moriglia/fldpc", tag="v1.1" }
 stdlib = "*"
 
 [library]
