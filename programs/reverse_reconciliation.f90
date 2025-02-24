@@ -255,6 +255,31 @@ program reverse_reconciliation
         call noisemapper_set_monotonicity(nm)
     end if
 
+    ! +-------------------------------+
+    ! | Display simulation parameters |
+    ! +-------------------------------+
+    if (me == 1) then
+        call decoder%print
+        print '("Each frame carries ", i6, " information bits.")', K
+        print '("Performing ", i3, " iterations.")', max_iter
+        print *, "SNR [dB] range:", snrdb
+        print '("Simulation loops: at least", i6, " up to ", i6, " or at least ", i3, " frame errors are found")', &
+            min_sim, max_sim, min_ferr
+        print '("Constellation has ", i3, " symbols, each carrying ", i3, " bits")', nm%M, nm%bps
+        if (isHard) then
+            print *, "Alice will use only HARD information"
+        else
+            print *, "Alice will use SOFT information"
+        end if
+        if (uniform_th) then
+            print *, "Bob is using uniform probability quantization"
+        else
+            print *, "Bob is using maximum a-posteriori probability quantization"
+        end if
+    end if
+
+    sync all
+
     ! +------------+
     ! | Simulation |
     ! +------------+
