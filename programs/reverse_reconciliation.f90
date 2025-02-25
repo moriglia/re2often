@@ -397,7 +397,7 @@ program reverse_reconciliation
                 fer(i_snr) = real(f_err(i_snr), dp)/real(f_cnt(i_snr), dp)
             end if
 
-            write(io, '(f6.3, T16, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
+            write(io, '(f12.3, T10, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
                 snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
         end do
         close(io)

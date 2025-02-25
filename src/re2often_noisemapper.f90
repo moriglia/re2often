@@ -454,7 +454,6 @@ contains
 
         denominator(:,:) = 0
         nm%reverse_hard_lappr_table(:,:) = 0
-        ! do i = 0, nm%M-1 ! transmitted symbol
         do j = 0, nm%M-1 ! received symbol
             do k = 0, nm%bps-1 ! received bit
                 if (nm%s_to_b(j, k)) then
@@ -465,7 +464,6 @@ contains
                 end if
             end do
         end do
-        ! end do
 
         do i = 0, nm%M - 1
             do k = 0, nm%bps-1
