@@ -19,6 +19,11 @@ name = "reverse-reconciliation"
 source-dir = "programs"
 main = "reverse_reconciliation.f90"
 
+[[executable]]
+name = "mutual-information"
+source-dir = "programs"
+main = "mutual_information.f90"
+
 [executable.dependencies]
 forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
 IO-Fortran-Library = { git="https://github.com/acbbullock/IO-Fortran-Library", branch="main" }
