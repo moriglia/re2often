@@ -188,6 +188,12 @@ program mutual_information
 
     if (me == 1) then
         outdata(:, 2) = outdata(:, 1) - 10*log10(outdata(:,3))
+        if (uniform_th) then
+            output_root = trim(output_root)//"/uniform"
+        else
+            output_root = trim(output_root)//"/equidis"
+        end if
+
         call make_directory_and_file_name(output_root, bps, isReverse, isHard, &
             snr, nsnr, 0, 0, 0, 0, output_dir, output_name)
         call execute_command_line("mkdir -p " // trim(output_dir))
@@ -197,7 +203,7 @@ program mutual_information
         write(io, '(A, T16, A, T32, A)') &
             "SNR [dB]", "Eb/N0 [dB]", "I"
         do i_snr = 1, nsnr
-            write(io, '(f12.9, T16, f12.9, T32, E12.3E3)') &
+            write(io, '(f12.8, T16, f12.9, T32, E12.3E3)') &
                 outdata(i_snr, :)
         end do
         close(io)
@@ -206,7 +212,6 @@ program mutual_information
         header(1) = trim("SNR")
         header(2) = trim("scSNR")
         header(3) = trim("I")
-        print *, outdata(:,:)
         call to_file(x=outdata, file=trim(output_dir)//"/"//trim(output_name)//".csv", &
             header=header, fmt="f")
     end if

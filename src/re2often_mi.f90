@@ -20,6 +20,7 @@ module re2often_mi
     !! Mutual information functions
     use, intrinsic :: iso_c_binding
     use re2often_noisemapper
+    use external_hermite
     use quadpack, only: dqags, dqagi
     implicit none
 
@@ -254,18 +255,21 @@ contains
         !! SNR [dB] at which to calculate the mutual information
 
         real(c_double) :: Abserr
-        integer :: Neval, Ier, Limit, Lenw, Last
+        integer :: Ier
+        ! integer :: Neval, Ier, Limit, Lenw, Last
 
-        integer :: Iwork(100)
-        real(c_double) :: Work(400)
-        Limit = 100
-        Lenw = 400
+        ! integer :: Iwork(100)
+        ! real(c_double) :: Work(400)
+        ! Limit = 100
+        ! Lenw = 400
 
         call noisemapper_update_N0_from_snrdb(nm, snrdb)
 
-        call dqagi(f_integrand_soft_direct, 0d0, 2, 1d-12, 1d-6, &
-            I, Abserr, Neval, Ier, &
-            Limit, Lenw, Last, Iwork, Work)
+        ! call dqagi(f_integrand_soft_direct, 0d0, 2, 1d-12, 1d-6, &
+        !     I, Abserr, Neval, Ier, &
+        !     Limit, Lenw, Last, Iwork, Work)
+
+        I = - hermite(20, f_integrand_GH, Ier)
 
         if (Ier /= 0) then
             print '("Error at ", f10.3, " [dB]: error ", i1)', snrdb, Ier
