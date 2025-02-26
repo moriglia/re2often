@@ -179,7 +179,7 @@ contains
 
         do i = 0, nm%M-1
             do j = 0, nm%M-1
-                H = nm%probabilities(j) * nm%fwd_probabilities(j, i) * &
+                H = H + nm%probabilities(j) * nm%fwd_probabilities(j, i) * &
                     log2(nm%fwd_probabilities(j, i))
             end do
         end do
