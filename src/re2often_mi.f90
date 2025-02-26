@@ -129,7 +129,7 @@ contains
             I, Abserr, Neval, Ier, &
             Limit, Lenw, Last, Iwork, Work)
 
-        if (Ier /= 1) then
+        if (Ier /= 0) then
             print '("Error at ", f10.3, " [dB]: error ", i1)', snrdb, Ier
         end if
 
@@ -158,7 +158,7 @@ contains
             I, Abserr, Neval, Ier, &
             Limit, Lenw, Last, Iwork, Work)
 
-        if (Ier /= 1) then
+        if (Ier /= 0) then
             print '("Error at ", f10.3, " [dB]: error ", i1)', snrdb, Ier
         end if
 
