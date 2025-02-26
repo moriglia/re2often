@@ -38,9 +38,15 @@ module re2often_mi
 contains
 
     real(c_double) elemental function log2(arg) result(l)
+        !! Base 2 log
+        !! @warning If the argument is not positive, 0 is returned
         real(c_double), intent(in) :: arg
 
-        l = log(arg)/log(2d0)
+        if (arg .gt. 0) then
+            l = log(arg)/log(2d0)
+        else
+            l = 0
+        end if
     end function log2
 
     ! +-----------------------------+
@@ -104,7 +110,7 @@ contains
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
 
-        H = sum(nm%delta_Fy * log2(nm%delta_Fy))
+        H = - sum(nm%delta_Fy * log2(nm%delta_Fy))
     end function H_Xhat
 
 
