@@ -56,7 +56,8 @@ program direct_reconciliation
     integer, allocatable :: f_cnt(:)[:]
 
     integer(c_int), allocatable :: x_i(:)
-    real(c_double), allocatable :: x(:), y(:), lappr(:), lappr_out(:)
+    ! real(c_double), allocatable :: x(:), y(:), lappr(:), lappr_out(:)
+    real(c_double), allocatable :: y(:), lappr(:), lappr_out(:)
     logical, allocatable :: word(:), synd(:)
     integer :: new_errors
     integer :: K, N_iter
@@ -185,10 +186,12 @@ program direct_reconciliation
         edge_definition(2:, 2), &
         edge_definition(2:, 3))
 
+    deallocate(edge_definition) ! Save up some memory unused memory
+
     K = decoder%vnum - decoder%cnum
 
     allocate(x_i(decoder%vnum/bps))
-    allocate(x(decoder%vnum/bps))
+    ! allocate(x(decoder%vnum/bps))
     allocate(y(decoder%vnum/bps))
 
     allocate(lappr(decoder%vnum))
@@ -213,11 +216,11 @@ program direct_reconciliation
 
         loop_frame : do i_frame = 1, max_sim
             call noisemapper_random_symbol(nm, x_i)
-            x    = noisemapper_symbol_index_to_value(nm, x_i)
+            y    = noisemapper_symbol_index_to_value(nm, x_i)
             word = logical(noisemapper_symbol_to_word(nm, x_i)) ! from logical 1 to logical 4
             synd = decoder%word_to_synd(word)
 
-            y    = rvs_normal(loc=x, scale=nm%sigma)
+            y    = rvs_normal(loc=y, scale=nm%sigma)
 
             call noisemapper_y_to_lappr(nm, y, lappr)
 
@@ -244,11 +247,11 @@ program direct_reconciliation
                 exit loop_frame
             end if
         end do loop_frame
-        if ((i_snr .ge. 3)) then
-            if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
+        if ((i_snr .ge. 2)) then
+            if (all(b_err(i_snr-1 : i_snr)[1] == 0)) then
                 ! Check again after 10 seconds, so that if new errors pop up from other images, we keep helping them
                 call sleep(10)
-                if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
+                if (all(b_err(i_snr-1 : i_snr)[1] == 0)) then
                     if (me==1) then
                         call progress_bar%update(current=1d0)
                     end if
@@ -280,7 +283,7 @@ program direct_reconciliation
                 fer(i_snr) = real(f_err(i_snr), dp)/real(f_cnt(i_snr), dp)
             end if
 
-            write(io,  '(f10.3, T12, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
+            write(io,  '(f12.3, T10, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
                 snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
         end do
         close(io)

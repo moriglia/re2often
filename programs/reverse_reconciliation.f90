@@ -74,7 +74,8 @@ program reverse_reconciliation
     integer, allocatable :: f_cnt(:)[:] ! Total frame count per SNR value
 
     integer, allocatable :: x_i(:) ! Indexes of generated symbols
-    double precision, allocatable :: x(:), y(:), lappr(:), lappr_out(:)
+    ! double precision, allocatable :: x(:), y(:), lappr(:), lappr_out(:)
+    double precision, allocatable :: y(:), lappr(:), lappr_out(:)
     ! generated symbol, Gaussian channel output, LAPPRs before and after decoding
     double precision, allocatable :: nhat(:) ! Soft Metric
     integer, allocatable :: xhat(:) ! Decided symbol
@@ -235,10 +236,12 @@ program reverse_reconciliation
         edge_definition(2:, 2), &
         edge_definition(2:, 3))
 
+    deallocate(edge_definition)
+
     K = decoder%vnum - decoder%cnum
 
     allocate(x_i(decoder%vnum/bps))
-    allocate(x(decoder%vnum/bps))
+    ! allocate(x(decoder%vnum/bps))
     allocate(y(decoder%vnum/bps))
 
     allocate(xhat(decoder%vnum/bps))
@@ -309,10 +312,10 @@ program reverse_reconciliation
         loop_frame : do i_frame = 1, max_sim
             ! Alice generates random symbols:
             call noisemapper_random_symbol(nm, x_i)
-            x = noisemapper_symbol_index_to_value(nm, x_i)
+            y = noisemapper_symbol_index_to_value(nm, x_i)
 
             ! AWGN channel
-            y    = rvs_normal(loc=x, scale=nm%sigma)
+            y    = rvs_normal(loc=y, scale=nm%sigma)
 
             ! Bob evaluates the soft metric, takes the decisions and evaluates the syndrome
             if (isHard) then
