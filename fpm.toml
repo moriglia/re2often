@@ -29,6 +29,11 @@ name = "bpsk"
 source-dir = "programs"
 main = "bpsk.f90"
 
+[[executable]]
+name = "mi-biawgn"
+source-dir = "programs"
+main = "mi_biawgn.f90"
+
 [executable.dependencies]
 forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
 IO-Fortran-Library = { git="https://github.com/acbbullock/IO-Fortran-Library", branch="main" }
