@@ -20,7 +20,13 @@ program bpsk
     ! use forbear, only: bar_object
     use stdlib_random, only: stdlib_random_seed => random_seed
     use stdlib_stats_distribution_normal, only: rvs_normal
+    use re2often_utils
     implicit none
+
+    integer     :: argc
+    character(len=500), allocatable :: argv(:)
+    character(len=500) :: tanner_file
+    character(len=500) :: output_root
 
     real(wp)    :: snr(2)         ! Signal to Noise Ratio in dB
     integer     :: nsnr           ! Number of SNR points
@@ -31,7 +37,7 @@ program bpsk
 
     integer, allocatable :: edge_definition(:,:)
     integer              :: Ne
-    real(wp), target :: outdata(21,3)
+    real(wp), allocatable, target :: outdata(:,:)
 
     real(wp), pointer :: snrdb_array(:), ber(:), fer(:)
 
@@ -47,19 +53,75 @@ program bpsk
     real(wp) :: Es, N0, N0_half, sigma, N0_half_est
 
 
-    integer  :: x_i(64800)
-    real(wp) :: x(64800)
-    real(wp) :: y(64800)
-    logical  :: word(64800)
-    logical  :: synd(64800)
-    real(wp) :: lappr(64800)
-    real(wp) :: lappr_updated(64800)
+    integer, allocatable  :: x_i(:)
+    real(wp), allocatable :: x(:)
+    real(wp), allocatable :: y(:)
+    logical, allocatable  :: word(:)
+    logical, allocatable  :: synd(:)
+    real(wp), allocatable :: lappr(:)
+    real(wp), allocatable :: lappr_updated(:)
 
     integer :: new_errors, n_ldpc_it
 
-    integer :: b_error_count(21)[*]
-    integer :: f_error_count(21)[*]
-    integer :: f_count(21)[*]
+    integer, allocatable :: b_error_count(:)[:]
+    integer, allocatable :: f_error_count(:)[:]
+    integer, allocatable :: f_count(:)[:]
+
+    argc = command_argument_count()
+    allocate(argv(argc))
+
+    do i = 1, argc
+        call get_command_argument(i, argv(i))
+    end do
+
+    ! +--------------------+
+    ! | Set default values |
+    ! +--------------------+
+    nsnr = 11
+    snr  = [-3, -2]
+    min_ferr = 50
+    max_sim  = 5000
+    min_sim  = 250
+    max_iter = 50
+    tanner_file = "./assets/codes/dvbs2ldpc0.500.csv"
+    output_root = "./res/rate1d2"
+
+    i = 1
+    do while(i <= argc)
+        if (argv(i) == "--nsnr") then
+            read(argv(i+1),*) nsnr
+            i = i + 2
+        elseif (argv(i) == "--snr") then
+            read(argv(i+1), *) snr(1)
+            read(argv(i+2), *) snr(2)
+            i = i+3
+        elseif (argv(i) == "--minframeerr") then
+            read(argv(i+1), *) min_ferr
+            i = i + 2
+        elseif (argv(i) == "--minsimloops") then
+            read(argv(i+1), *) min_sim
+            i = i + 2
+        elseif (argv(i) == "--maxsimloops") then
+            read(argv(i+1), *) max_sim
+            i = i + 2
+        elseif (argv(i) == "--maxldpciter") then
+            read(argv(i+1), *) max_iter
+            i = i + 2
+        elseif (argv(i) == "--tannerfile") then
+            call get_command_argument(i+1, tanner_file)
+            i = i + 2
+        elseif (argv(i) == "--outdir") then
+            call get_command_argument(i+1, output_root)
+            i = i + 2
+        else
+            print *, "Unrecognized argument: ", argv(i)
+            stop
+        end if
+    end do
+
+    deallocate(argv)
+    allocate(outdata(nsnr, 3))
+
 
     ! type(bar_object) :: progress_bar
 
@@ -88,7 +150,7 @@ program bpsk
 
     critical
         call from_file(&
-            file="assets/codes/dvbs2ldpc0.500.csv", &
+            file=tanner_file, &
             into=edge_definition, &
             header=.true.)
     end critical
@@ -98,21 +160,29 @@ program bpsk
         edge_definition(2:, 2), &
         edge_definition(2:, 3))
 
+    deallocate(edge_definition)
+
     K = decoder%vnum - decoder%cnum
+
+    allocate(x(decoder%vnum))
+    allocate(x_i(decoder%vnum))
+    allocate(y(decoder%vnum))
+    allocate(word(decoder%vnum))
+    allocate(synd(decoder%cnum))
+    allocate(lappr(decoder%vnum))
+    allocate(lappr_updated(decoder%vnum))
 
     Es = 1
 
-    nsnr = 21
-    max_sim = 5000
-    min_sim = 250
-    max_iter = 50
-    min_ferr = 50
+    allocate(b_error_count(nsnr)[*])
+    allocate(f_error_count(nsnr)[*])
+    allocate(f_count(nsnr)[*])
 
     b_error_count(:) = 0
     f_error_count(:) = 0
     f_count(:)       = 0
 
-    snrdb_array(:) = [(-2.5 + real(i, wp)*0.05_wp, i=0, 20)]
+    snrdb_array(:) = [(snr(1) + real(i, wp)*(snr(2) - snr(1))/real(nsnr-1, wp), i=0, nsnr-1)]
     ! if (me == 1) then
     !    call progress_bar%initialize(&
     !         filled_char_string='+', prefix_string='SNR points progress |',&
@@ -149,7 +219,7 @@ program bpsk
             n_ldpc_it = max_iter
             call decoder%decode(lappr, lappr_updated, synd, n_ldpc_it)
 
-            new_errors = count((lappr_updated(:K) < 0) .neqv. word(:K))
+            new_errors = count((lappr_updated < 0) .neqv. word)
 
             critical
                 if (new_errors > 0) then
@@ -185,11 +255,13 @@ program bpsk
                 fer(i_snr) = real(f_error_count(i_snr), wp)/real(f_count(i_snr), wp)
             end if
 
-            print '(f6.3, T16, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)', &
+            print '(f12.3, T10, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)', &
                 snrdb_array(i_snr), f_count(i_snr), b_error_count(i_snr), ber(i_snr), f_error_count(i_snr), fer(i_snr)
         end do
 
-        call to_file(x=outdata, file="bpsk_50it.csv", header=["SNR", "BER", "FER"], fmt="f")
+        call save_data(outdata, trim(output_root)//"/bpsk", 1, &
+            .false., .false., snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
+        ! call to_file(x=outdata, file="bpsk_50it.csv", header=["SNR", "BER", "FER"], fmt="f")
     end if
 
 

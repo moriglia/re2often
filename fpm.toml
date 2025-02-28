@@ -24,6 +24,11 @@ name = "mutual-information"
 source-dir = "programs"
 main = "mutual_information.f90"
 
+[[executable]]
+name = "bpsk"
+source-dir = "programs"
+main = "bpsk.f90"
+
 [executable.dependencies]
 forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
 IO-Fortran-Library = { git="https://github.com/acbbullock/IO-Fortran-Library", branch="main" }
