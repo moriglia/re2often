@@ -648,6 +648,46 @@ contains
     end function noisemapper_invert_soft_metric
 
 
+    module function noisemapper_invert_soft_metric_search(nm, n, x_i, res) result(y)
+        !! generate all tentative channel output samples from the received soft metric
+        type(noisemapper_type), intent(in) :: nm
+        !! noise mapper
+        real(c_double), intent(in) :: n
+        !! Soft metric
+        integer(c_int), intent(in) :: x_i
+        !! Hypotetical received symbol alphabet index
+        real(c_double), intent(in), optional :: res
+        !! Resolution
+        real(c_double) :: y
+        !! Tentative channel output samples
+
+        real(c_double) :: Fy, resolution
+        integer :: idx
+
+        if (present(res)) then
+            resolution = res
+        else
+            resolution = 1d-21
+        end if
+
+        Fy = n
+        if (nm%monotonicity_configuration(x_i)) then
+            Fy = 1-Fy
+        end if
+        Fy = nm%Fy_thresholds(x_i) + Fy*nm%delta_Fy(x_i)
+
+        idx = binsearch(nm%Fy_grid, Fy)
+
+
+        if ((idx == 0) .or. (idx == size(nm%Fy_grid))) then
+            y = noisemapper_inverse_Fy_search(nm, Fy, res=resolution)
+        else
+            y = noisemapper_inverse_Fy_search(nm, Fy, res=resolution, &
+                ybounds=(nm%base_y_grid + (idx + [0, 1])*nm%y_grid_step))
+        end if
+    end function noisemapper_invert_soft_metric_search
+
+
     module subroutine noisemapper_soft_reverse_lappr_single(nm, x_i, n, lappr)
         !! Calculate the LAPPR from the transmitted symbol and the soft metric
         type(noisemapper_type), intent(in) :: nm
@@ -723,7 +763,7 @@ contains
     ! +-----------------------------+
     ! | Uniform probabilities at RX |
     ! +-----------------------------+
-    module function noisemapper_inverse_Fy_search(nm, Fy, res) result (y)
+    module function noisemapper_inverse_Fy_search(nm, Fy, res, ybounds) result (y)
         !! Find the `y` value whose CDF is `Fy`, within a certain `res`-olution
         !! on the CDF
         type(noisemapper_type), intent(in) :: nm
@@ -732,6 +772,8 @@ contains
         !! CDF value to be inverted
         real(c_double), intent(in), optional :: res
         !! Resolution of the search result
+        real(c_double), intent(in), optional :: ybounds(2)
+        !! Initial lower and upper bound
         real(c_double) :: y
         !! output channel value whose CDF is `Fy`
 
@@ -745,7 +787,21 @@ contains
             resolution = 1d-12
         end if
 
-        Fy_l = noisemapper_Fy(nm, 0d0)
+        if (.not. present(yBounds)) then
+            go to 50
+        else
+            y_l = minval(ybounds)
+            y_h = maxval(ybounds)
+
+            Fy_l = noisemapper_Fy(nm, y_l)
+            Fy_h = noisemapper_Fy(nm, y_h)
+            if ((Fy .lt. Fy_l) .or. (Fy .gt. Fy_h)) then
+                go to 50
+            end if
+            go to 100 ! find_y
+        end if
+
+50      Fy_l = noisemapper_Fy(nm, 0d0)
         if (Fy_l .gt. Fy) then
             y_h = 0
             y_l = -1
@@ -769,7 +825,7 @@ contains
             end do
         end if
 
-        do while ( (Fy_h-Fy_l) .gt. resolution)
+100     find_y: do while ( (Fy_h-Fy_l) .gt. resolution)
             y = (y_h + y_l)/2
             Fy_next = noisemapper_Fy(nm, y)
             if (Fy_next .gt. Fy) then
@@ -779,7 +835,7 @@ contains
                 y_l = y
                 Fy_l = Fy_next
             end if
-        end do
+        end do find_y
     end function noisemapper_inverse_Fy_search
 
 

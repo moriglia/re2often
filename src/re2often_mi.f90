@@ -68,7 +68,7 @@ contains
         pdf = 0
 
         a_j = nm%constellation(x)
-        two_y_i = 2*noisemapper_invert_soft_metric(nm, n, xhat)
+        two_y_i = 2*noisemapper_invert_soft_metric_search(nm, n, xhat)
         do k = 0, nm%M-1
             pdf = pdf + nm%probabilities(k) * &
                 exp((nm%constellation(k) - a_j)*(two_y_i - nm%constellation(k) - a_j)/nm%N0)
