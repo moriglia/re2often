@@ -27,6 +27,7 @@ program bpsk
     character(len=500), allocatable :: argv(:)
     character(len=500) :: tanner_file
     character(len=500) :: output_root
+    logical     :: tanner_has_header
 
     real(wp)    :: snr(2)         ! Signal to Noise Ratio in dB
     integer     :: nsnr           ! Number of SNR points
@@ -84,6 +85,7 @@ program bpsk
     min_sim  = 250
     max_iter = 50
     tanner_file = "./assets/codes/dvbs2ldpc0.500.csv"
+    tanner_has_header = .false.
     output_root = "./res/rate1d2"
 
     i = 1
@@ -113,6 +115,9 @@ program bpsk
         elseif (argv(i) == "--outdir") then
             call get_command_argument(i+1, output_root)
             i = i + 2
+        elseif(argv(i) == "-th") then
+            tanner_has_header = .true.
+            i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
             stop
@@ -137,7 +142,7 @@ program bpsk
     call sleep(me)
     call system_clock(time_seed)
     seed(1) = mod(seed(1)*sum(seed(me:)), abs(time_seed) + 2) - 12399027
-    seed(2) = 467738 * me * (seed(3) - time_seed) + iand(sum(seed(:me)), time_seed)
+    seed(2) = 467738 * me * (seed(3) - time_seed) + iand(sum(seed(:mod(me, 8)+1)), time_seed)
     seed(3) = (time_seed + me) * (2 + mod(abs(883 + seed(mod(time_seed, 8) + 1)), me)) + &
         mod(sum(seed), max(maxval(seed(:)), 37))
     seed(4) = mod(987654321*time_seed, abs(time_seed - me*me*me) + 3)
@@ -152,13 +157,18 @@ program bpsk
         call from_file(&
             file=tanner_file, &
             into=edge_definition, &
-            header=.true.)
+            header=tanner_has_header)
     end critical
 
     decoder = TDecoder(&
         edge_definition(1 , 1), &
         edge_definition(2:, 2), &
         edge_definition(2:, 3))
+
+    if (me==1) then
+        print *, edge_definition(1,:)
+        call decoder%print
+    end if
 
     deallocate(edge_definition)
 
@@ -195,7 +205,7 @@ program bpsk
         N0_half = N0/2_wp
         sigma = sqrt(N0_half)
 
-        print '("[",I2,"] SNR[dB]=",f5.2,3x,"N_0/2=",f9.6)', me, snrdb_array(i_snr), N0_half
+        print '("[",I2,"] SNR[dB]=",f6.2,3x,"N_0/2=",f9.6)', me, snrdb_array(i_snr), N0_half
 
         N0_half_est = 0
 
@@ -230,12 +240,14 @@ program bpsk
             end critical
 
             if ((f_count(i_snr)[1] > min_sim) .and. (f_error_count(i_snr)[1] > min_ferr)) then
-                N0_half_est = N0_half_est / real(i_frame, wp)
-                print '("[",I2,"] COMPLETED SNR[dB]=",f5.2,3x,"N_0/2=",f9.6," (estimated)   DELTA=", f9.6)', &
-                    me, snrdb_array(i_snr), N0_half_est, abs(N0_half - N0_half_est)
                 exit frame_loop
             end if
+            if (f_count(i_snr)[1] >= max_sim) exit frame_loop
         end do frame_loop
+
+        N0_half_est = N0_half_est / real(i_frame, wp)
+        print '("[",I2,"] COMPLETED SNR[dB]=",f6.2,3x,"N_0/2=",f9.6," (estimated)   DELTA=", f9.6)', &
+            me, snrdb_array(i_snr), N0_half_est, abs(N0_half - N0_half_est)
 
         ! if (me==1) then
         !    call progress_bar%update(current=real(i_snr, 8)/real(nsnr, 8))
@@ -255,7 +267,7 @@ program bpsk
                 fer(i_snr) = real(f_error_count(i_snr), wp)/real(f_count(i_snr), wp)
             end if
 
-            print '(f12.3, T10, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)', &
+            print '(f12.3, T14, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)', &
                 snrdb_array(i_snr), f_count(i_snr), b_error_count(i_snr), ber(i_snr), f_error_count(i_snr), fer(i_snr)
         end do
 
