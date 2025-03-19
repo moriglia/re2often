@@ -37,17 +37,21 @@ module re2often_mi
 
 contains
 
-    real(c_double) elemental function log2(arg) result(l)
+    real(c_double) elemental function log0(arg, base) result(l)
         !! Base 2 log
         !! @warning If the argument is not positive, 0 is returned
         real(c_double), intent(in) :: arg
+        real(c_double), intent(in), optional :: base
 
         if (arg .gt. 0) then
-            l = log(arg)/log(2d0)
+            l = log(arg)
+            if (present(base)) then
+                l = l/log(base)
+            end if
         else
             l = 0
         end if
-    end function log2
+    end function log0
 
     ! +-----------------------------+
     ! | Soft Reverse Reconciliation |
@@ -97,12 +101,13 @@ contains
         f = 0
 
         do j = 0, nm%M-1 ! X index
-            log2_f_n_cond_x = log2(sum(f_n_xhat_cond_x_array(j, :)))
+            log2_f_n_cond_x = log0(sum(f_n_xhat_cond_x_array(j, :)))
             do i = 0, nm%M-1 ! Xhat index
                 f = f + nm%probabilities(j) * f_n_xhat_cond_x_array(j, i) * &
-                    (log2(f_n_xhat_cond_x_array(j, i)) - log2_f_n_cond_x)
+                    (log0(f_n_xhat_cond_x_array(j, i)) - log2_f_n_cond_x)
             end do
         end do
+        f = f/log(2d0)
     end function f_soft_reverse
 
     real(c_double) function H_Xhat(nm) result(H)
@@ -110,7 +115,7 @@ contains
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
 
-        H = - sum(nm%delta_Fy * log2(nm%delta_Fy))
+        H = - sum(nm%delta_Fy * log0(nm%delta_Fy))/log(2d0)
     end function H_Xhat
 
 
@@ -186,10 +191,10 @@ contains
         do i = 0, nm%M-1
             do j = 0, nm%M-1
                 H = H + nm%probabilities(j) * nm%fwd_probabilities(j, i) * &
-                    log2(nm%fwd_probabilities(j, i))
+                    log0(nm%fwd_probabilities(j, i))
             end do
         end do
-        H = - H
+        H = - H/log(2d0)
     end function H_Xhat_cond_X
 
 
@@ -198,11 +203,22 @@ contains
         real(c_double), intent(in) :: snrdb
         !! SNR [dB] at which to evaluate the Mutual information
 
+        integer :: ii, jj
+
         call noisemapper_update_N0_from_snrdb(nm, snrdb)
         call noisemapper_set_y_thresholds(nm)
         call noisemapper_update_hard_reverse_tables(nm)
 
-        I = H_Xhat(nm) - H_Xhat_cond_X(nm)
+        ! I = H_Xhat(nm) - H_Xhat_cond_X(nm)
+        I = 0
+
+        do jj = 0, nm%M-1
+            do ii = 0, nm%M-1
+                I = I + nm%fwd_probabilities(ii, jj) * nm%probabilities(ii) * &
+                    (log0(nm%fwd_probabilities(ii, jj)) - log0(nm%delta_Fy(jj)))
+            end do
+        end do
+        I = I/log(2d0)
     end function I_hard_reverse_equidistant_th
 
 
@@ -211,11 +227,22 @@ contains
         real(c_double), intent(in) :: snrdb
         !! SNR [dB] at which to evaluate the Mutual information
 
+        integer :: ii, jj;
+
         call noisemapper_update_N0_from_snrdb(nm, snrdb)
         call noisemapper_set_y_thresholds_uniform(nm)
         call noisemapper_update_hard_reverse_tables(nm)
 
-        I = H_Xhat(nm) - H_Xhat_cond_X(nm)
+        ! I = H_Xhat(nm) - H_Xhat_cond_X(nm)
+        I = 0
+
+        do jj = 0, nm%M-1
+            do ii = 0, nm%M-1
+                I = I + nm%fwd_probabilities(ii, jj) * nm%probabilities(ii) * &
+                    (log0(nm%fwd_probabilities(ii, jj)) - log0(nm%delta_Fy(jj)))
+            end do
+        end do
+        I = I/log(2d0)
     end function I_hard_reverse_uniform_output_th
 
 
@@ -240,9 +267,9 @@ contains
                 log_arg = log_arg + nm%probabilities(k) * &
                     exp((a_k-a_j)*(a_j-a_k + 2*x*sq2*nm%sigma)/nm%N0)
             end do
-            f = f + nm%probabilities(j) * log2(log_arg)
+            f = f + nm%probabilities(j) * log0(log_arg)
         end do
-        f = f / sqrt(acos(-1d0))
+        f = f / (sqrt(acos(-1d0)) * log(2d0))
     end function f_integrand_GH
 
 
