@@ -667,7 +667,7 @@ contains
         if (present(res)) then
             resolution = res
         else
-            resolution = 1d-21
+            resolution = 1d-12
         end if
 
         Fy = n

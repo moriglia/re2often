@@ -213,6 +213,6 @@ program mutual_information
         header(2) = trim("scSNR")
         header(3) = trim("I")
         call to_file(x=outdata, file=trim(output_dir)//"/"//trim(output_name)//".csv", &
-            header=header, fmt="f")
+            header=header, fmt="e")
     end if
 end program mutual_information
