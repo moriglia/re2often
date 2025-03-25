@@ -43,6 +43,8 @@ program direct_reconciliation
     integer :: max_sim        ! Maximum simulation loops
     integer :: min_sim        ! Minimum simulation loops
     integer :: max_iter       ! Maximum number of LDPC iterations
+    logical :: tanner_header  ! Whether tanner file has a header
+    logical :: onlyinfo       ! Whether to compare only the first N-M bits, instead of whole frame
 
     integer, allocatable :: edge_definition(:,:)
     double precision, allocatable, target :: outdata(:,:)
@@ -96,46 +98,46 @@ program direct_reconciliation
     max_iter = 50
     tanner_file = "./assets/codes/dvbs2ldpc0.500.csv"
     output_root = "./res/rate1d2"
+    onlyinfo = .false.
+    tanner_header = .false.
+
 
     i = 1
     do while(i <= argc)
         if (argv(i) == "--nsnr") then
             read(argv(i+1),*) nsnr
             i = i + 2
-            ! print *, "nsnr", nsnr
         elseif (argv(i) == "--snr") then
             read(argv(i+1), *) snr(1)
             read(argv(i+2), *) snr(2)
             i = i+3
-            ! print *, "snr", snr
         elseif (argv(i) == "--bps") then
             read(argv(i+1),*) bps
             i = i + 2
-            ! print *, "bps", bps
         elseif (argv(i) == "--minframeerr") then
             read(argv(i+1), *) min_ferr
             i = i + 2
-            ! print *, "ferr", min_ferr
         elseif (argv(i) == "--minsimloops") then
             read(argv(i+1), *) min_sim
             i = i + 2
-            ! print *, "min_sim", min_sim
         elseif (argv(i) == "--maxsimloops") then
             read(argv(i+1), *) max_sim
             i = i + 2
-            ! print *, "max_sim", max_sim
         elseif (argv(i) == "--maxldpciter") then
             read(argv(i+1), *) max_iter
             i = i + 2
-            ! print *, "ldpc", max_iter
         elseif (argv(i) == "--tannerfile") then
             call get_command_argument(i+1, tanner_file)
             i = i + 2
-            ! print*, trim(tanner_file)
         elseif (argv(i) == "--outdir") then
             call get_command_argument(i+1, output_root)
             i = i + 2
-            ! print *, trim(output_file)
+        elseif (argv(i) == "--onlyinfo") then
+            onlyinfo = .true.
+            i = i + 1
+        elseif (argv(i) == "-th") then
+            tanner_header = .true.
+            i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
             stop
@@ -178,7 +180,7 @@ program direct_reconciliation
     f_cnt(:) = 0
 
     critical
-        call from_file(file=tanner_file, into=edge_definition, header=.true.)
+        call from_file(file=tanner_file, into=edge_definition, header=tanner_header)
     end critical
 
     decoder = TDecoder(&
@@ -188,7 +190,11 @@ program direct_reconciliation
 
     deallocate(edge_definition) ! Save up some memory unused memory
 
-    K = decoder%vnum - decoder%cnum
+    if (onlyinfo) then
+        K = decoder%vnum - decoder%cnum
+    else
+        K = decoder%vnum
+    end if
 
     allocate(x_i(decoder%vnum/bps))
     ! allocate(x(decoder%vnum/bps))

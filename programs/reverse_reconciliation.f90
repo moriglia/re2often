@@ -49,6 +49,8 @@ program reverse_reconciliation
     integer :: max_iter       ! Maximum number of LDPC iterations
     logical :: isHard         ! Whether to perform hard reverse reconciliation
     logical :: uniform_th     ! Whether to set thresholds for uniform output symbols
+    logical :: tanner_header  ! Whether tanner file has a header
+    logical :: onlyinfo       ! Whether to compare only the first N-M bits, instead of whole frame
 
     integer, allocatable :: edge_definition(:,:)
 
@@ -125,6 +127,8 @@ program reverse_reconciliation
     isHard = .false.
     uniform_th = .false.
     alpha = 1d0
+    onlyinfo = .false.
+    tanner_header = .false.
 
     i = 1
     do while(i <= argc)
@@ -172,6 +176,12 @@ program reverse_reconciliation
             i = i + 2
         elseif (argv(i) == "-u") then
             uniform_th = .true.
+            i = i + 1
+        elseif (argv(i) == "--onlyinfo") then
+            onlyinfo = .true.
+            i = i + 1
+        elseif (argv(i) == "-th") then
+            tanner_header = .true.
             i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
@@ -224,7 +234,7 @@ program reverse_reconciliation
     f_cnt(:) = 0
 
     critical
-        call from_file(file=tanner_file, into=edge_definition, header=.true.)
+        call from_file(file=tanner_file, into=edge_definition, header=tanner_header)
     end critical
 
 
@@ -238,7 +248,11 @@ program reverse_reconciliation
 
     deallocate(edge_definition)
 
-    K = decoder%vnum - decoder%cnum
+    if (onlyinfo) then
+        K = decoder%vnum - decoder%cnum
+    else
+        K = decoder%vnum
+    end if
 
     allocate(x_i(decoder%vnum/bps))
     ! allocate(x(decoder%vnum/bps))
@@ -263,9 +277,9 @@ program reverse_reconciliation
     ! +-------------------------------+
     if (me == 1) then
         call decoder%print
-        print '("Each frame carries ", i6, " information bits.")', K
+        print '("Each frame carries ", i6, " information bits.")', decoder%vnum - decoder%cnum
         print '("Performing ", i3, " iterations.")', max_iter
-        print *, "SNR [dB] range:", snrdb
+        print *, "SNR [dB] range:", snrdb(1), snrdb(size(snrdb))
         print '("Simulation loops: at least", i6, " up to ", i6, " or at least ", i3, " frame errors are found")', &
             min_sim, max_sim, min_ferr
         print '("Constellation has ", i3, " symbols, each carrying ", i3, " bits")', nm%M, nm%bps
@@ -330,7 +344,7 @@ program reverse_reconciliation
             if (isHard) then
                 call noisemapper_convert_symbol_to_hard_lappr(nm, x_i, lappr)
             else
-                call noisemapper_soft_reverse_lappr(nm, x_i, nhat, lappr)
+                call noisemapper_soft_reverse_lappr(nm, x_i, nhat, lappr, 1d-12)
             end if
             lappr = alpha*lappr
 
@@ -400,7 +414,7 @@ program reverse_reconciliation
                 fer(i_snr) = real(f_err(i_snr), dp)/real(f_cnt(i_snr), dp)
             end if
 
-            write(io, '(f12.3, T10, I10, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
+            write(io, '(f12.3, T16, I6, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
                 snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
         end do
         close(io)
