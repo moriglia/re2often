@@ -688,7 +688,7 @@ contains
     end function noisemapper_invert_soft_metric_search
 
 
-    module subroutine noisemapper_soft_reverse_lappr_single(nm, x_i, n, lappr)
+    module subroutine noisemapper_soft_reverse_lappr_single(nm, x_i, n, lappr, res)
         !! Calculate the LAPPR from the transmitted symbol and the soft metric
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
@@ -698,6 +698,8 @@ contains
         !! Soft metric
         real(c_double), intent(out) :: lappr(0:nm%bps-1)
         !! LAPPRs
+        real(c_double), intent(in), optional :: res
+        !! If present, it toggles the soft search down to `res` as resolution
 
         integer :: i !! alphabet index of tentative received symbol
         integer :: k !! further alphabet/bit index
@@ -711,7 +713,11 @@ contains
         x = nm%constellation(x_i)
 
         do i = 0, nm%M-1
-            twoy = 2*noisemapper_invert_soft_metric(nm, n, i)
+            if (present(res)) then
+                twoy = 2*noisemapper_invert_soft_metric_search(nm, n, i, res)
+            else
+                twoy = 2*noisemapper_invert_soft_metric(nm, n, i)
+            end if
 
             addendum = 0
             do k = 0, nm%M-1 ! k used as symbol index
@@ -741,7 +747,7 @@ contains
     end subroutine noisemapper_soft_reverse_lappr_single
 
 
-    module subroutine noisemapper_soft_reverse_lappr_array(nm, x_i, n, lappr)
+    module subroutine noisemapper_soft_reverse_lappr_array(nm, x_i, n, lappr, res)
         !! Calculate the LAPPR from the transmitted symbols and the soft metrics arrays
         type(noisemapper_type), intent(in) :: nm
         !! Noise mapper
@@ -751,12 +757,20 @@ contains
         !! Soft metric
         real(c_double), intent(out) :: lappr(0:size(x_i)*nm%bps-1)
         !! LAPPRs
+        real(c_double), intent(in), optional :: res
+        !! If present, it toggles the soft search down to `res` as resolution
 
         integer :: i
 
-        do i = 0, size(x_i)-1
-            call noisemapper_soft_reverse_lappr_single(nm, x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1))
-        end do
+        if (present(res)) then
+            do i = 0, size(x_i)-1
+                call noisemapper_soft_reverse_lappr_single(nm, x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1), res)
+            end do
+        else
+            do i = 0, size(x_i)-1
+                call noisemapper_soft_reverse_lappr_single(nm, x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1))
+            end do
+        end if
     end subroutine noisemapper_soft_reverse_lappr_array
 
 
