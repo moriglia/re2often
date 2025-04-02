@@ -29,6 +29,7 @@ program mi_biawgn
     real(dp), allocatable, target :: outdata(:,:)
     real(dp), pointer :: snrdb_array(:)
     real(dp), pointer :: mi_array(:)
+    real(dp), pointer :: mih_array(:)
     integer  :: i, Npts
     real(dp) :: start, stp
 
@@ -36,15 +37,18 @@ program mi_biawgn
     stp   = 20
     Npts = int(ceiling((stp - start)/.1d0)) + 1
 
-    allocate(outdata(Npts, 2))
+    allocate(outdata(Npts, 3))
     snrdb_array => outdata(:, 1)
     mi_array    => outdata(:, 2)
+    mih_array   => outdata(:, 3)
 
     snrdb_array = [(start + i*0.1d0, i=0, Npts-1)]
     mi_array(:) = 2 ! impossible value, so to detect errors...
+    mih_array(:)= 2
 
     do i = 1, Npts
         mi_array(i) = mutual_information(snrdb_array(i))
+        mih_array(i)= mutual_information_hard(snrdb_array(i))
     end do
 
     call to_file(outdata, file="mi_biawgn.csv", fmt="e")
@@ -53,6 +57,10 @@ contains
     real(dp) elemental function log_base_2(arg) result (l)
         real(dp), intent(in) :: arg
 
+        if (arg .le. 0) then
+            l = 0
+            return
+        end if
         l = log(arg)/ln_of_2
     end function log_base_2
 
@@ -74,4 +82,16 @@ contains
         mi = 1 - hermite(20, f_gh, ier)/twoSqrtPi
     end function mutual_information
 
+
+    real(dp) function mutual_information_hard(snrdb) result(mi)
+        real(dp), intent(in) :: snrdb
+        real(dp), parameter :: sqrt2 = sqrt(2d0)
+
+        real(dp) :: eps
+
+        ! N_0 = 10d0**(-snrdb/20d0)
+        eps = erfc(10d0**(snrdb/20d0))/2d0
+
+        mi = 1 + (1-eps) * log_base_2(1-eps) + eps * log_base_2(eps)
+    end function mutual_information_hard
 end program mi_biawgn
