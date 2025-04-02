@@ -51,6 +51,7 @@ program reverse_reconciliation
     logical :: uniform_th     ! Whether to set thresholds for uniform output symbols
     logical :: tanner_header  ! Whether tanner file has a header
     logical :: onlyinfo       ! Whether to compare only the first N-M bits, instead of whole frame
+    logical :: doEve          ! Eve is performing error correction
 
     integer, allocatable :: edge_definition(:,:)
 
@@ -129,6 +130,7 @@ program reverse_reconciliation
     alpha = 1d0
     onlyinfo = .false.
     tanner_header = .false.
+    doEve = .false.
 
     i = 1
     do while(i <= argc)
@@ -183,11 +185,19 @@ program reverse_reconciliation
         elseif (argv(i) == "-th") then
             tanner_header = .true.
             i = i + 1
+        elseif (argv(i) == "--eve" ) then
+            doEve = .true.
+            i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
             stop
         end if
     end do
+
+    if (doEve) then
+        ! Implies hard reconciliation
+        isHard = .true.
+    end if
 
 
     ! +------------------------------------+
@@ -323,6 +333,29 @@ program reverse_reconciliation
             call noisemapper_set_Fy_grids(nm)
         end if
 
+        if ( doEve ) then
+            ! Use lappr(bps+1 : 2*bps) to temporarily store the denominator
+            ! of the argument of the log, and lappr(1:bps) for the numerator
+            lappr(1 : 2*bps) = 0
+            do i = 1, bps
+                do io = 0, nm%M-1
+                    if (nm%s_to_b(io, i-1)) then
+                        lappr(bps + i) = lappr(bps + i) + nm%delta_Fy(io)
+                    else
+                        lappr(i) = lappr(i) + nm%delta_Fy(io)
+                    end if
+                end do
+            end do
+            ! Store the lappr in the first bps locations
+            lappr(1:bps) = log(lappr(1:bps)) - log(lappr(bps+1:2*bps))
+
+
+            do i = 1, decoder%vnum/bps-1
+                ! copy the lappr for the first symbol to all other symbols
+                lappr(i*bps + 1 : (i+1)*bps) = lappr(1:bps)
+            end do
+        end if
+
         loop_frame : do i_frame = 1, max_sim
             ! Alice generates random symbols:
             call noisemapper_random_symbol(nm, x_i)
@@ -342,7 +375,9 @@ program reverse_reconciliation
 
             ! Alice uses the soft metric to find the output
             if (isHard) then
-                call noisemapper_convert_symbol_to_hard_lappr(nm, x_i, lappr)
+                if (.not. doEve) then
+                    call noisemapper_convert_symbol_to_hard_lappr(nm, x_i, lappr)
+                end if
             else
                 call noisemapper_soft_reverse_lappr(nm, x_i, nhat, lappr, 1d-12)
             end if
