@@ -46,6 +46,7 @@ program mutual_information
     logical :: isReverse      ! Whether to calculate the M.I. for the reverse reconciliation
     logical :: isHard         ! Whether to perform hard reverse reconciliation
     logical :: uniform_th     ! Whether to set thresholds for uniform output symbols
+    logical :: isEntropy      ! Whether to evaluate the raw key entropy instead (implies reverse+hard)
 
     ! +-------------+
     ! | Output data |
@@ -93,6 +94,7 @@ program mutual_information
     isReverse = .false.
     isHard = .false.
     uniform_th = .false.
+    isEntropy = .false.
 
     ii = 1
     do while(ii <= argc)
@@ -121,11 +123,21 @@ program mutual_information
         elseif (argv(ii) == "-u") then
             uniform_th = .true.
             ii = ii + 1
+        elseif(argv(ii) == "-e") then
+            isEntropy = .true.
+            ii = ii + 1
         else
             print *, "Unrecognized argument: ", argv(ii)
             stop
         end if
     end do
+
+    if (isEntropy) then
+        ! Overrides hard and reverse
+        isHard = .true.
+        isReverse = .true.
+    end if
+
 
     me   = this_image()
     n_im = num_images()
@@ -162,7 +174,15 @@ program mutual_information
         snr_done(i_snr)[1] = .true.
         unlock(lck[1])
 
-        if (isReverse) then
+        if (isEntropy) then
+            call noisemapper_update_N0_from_snrdb(nm, outdata(i_snr, 1)[1])
+            if (uniform_th) then
+                call noisemapper_set_y_thresholds_uniform(nm)
+            else
+                call noisemapper_set_y_thresholds(nm)
+            end if
+            outdata(i_snr, 3)[1] = H_Xhat(nm)
+        elseif (isReverse) then
             if (isHard) then
                 if (uniform_th) then
                     outdata(i_snr, 3)[1] = I_hard_reverse_uniform_output_th(outdata(i_snr, 1)[1])
@@ -197,6 +217,9 @@ program mutual_information
         call make_directory_and_file_name(output_root, bps, isReverse, isHard, &
             snr, nsnr, 0, 0, 0, 0, output_dir, output_name)
         call execute_command_line("mkdir -p " // trim(output_dir))
+        if (isEntropy) then
+            output_name = "entropy_"//trim(output_name)
+        end if
         open(newunit=io, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
             status="replace", action="write")
 

@@ -28,6 +28,7 @@ module re2often_mi
     public :: I_soft_reverse_equidistant_th, I_soft_reverse_uniform_output_th
     public :: I_hard_reverse_equidistant_th, I_hard_reverse_uniform_output_th
     public :: I_direct
+    public :: H_Xhat, H_Xhat_cond_X
 
     type(noisemapper_type) :: nm
 
