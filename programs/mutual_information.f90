@@ -47,6 +47,8 @@ program mutual_information
     logical :: isHard         ! Whether to perform hard reverse reconciliation
     logical :: uniform_th     ! Whether to set thresholds for uniform output symbols
     logical :: isEntropy      ! Whether to evaluate the raw key entropy instead (implies reverse+hard)
+    logical :: editConfig     ! Whether to perform the calculation for a specific monotonicity configuration
+    integer :: monoConfig     ! Selected monotonicity configuration
 
     ! +-------------+
     ! | Output data |
@@ -95,6 +97,7 @@ program mutual_information
     isHard = .false.
     uniform_th = .false.
     isEntropy = .false.
+    editConfig = .false.
 
     ii = 1
     do while(ii <= argc)
@@ -126,6 +129,10 @@ program mutual_information
         elseif(argv(ii) == "-e") then
             isEntropy = .true.
             ii = ii + 1
+        elseif(argv(ii) == "-c") then
+            editConfig = .true.
+            read(argv(ii + 1), *) monoConfig
+            ii = ii + 2
         else
             print *, "Unrecognized argument: ", argv(ii)
             stop
@@ -136,6 +143,14 @@ program mutual_information
         ! Overrides hard and reverse
         isHard = .true.
         isReverse = .true.
+    end if
+
+    if (.not. editConfig) then
+        ! set default configuration
+        monoConfig = 2
+        do ii = 0, bps - 1
+            monoConfig = monoConfig * (1 + ishft(1, (ishft(1, ii)))) ! useless but nice to know :D
+        end do
     end if
 
 
@@ -159,6 +174,18 @@ program mutual_information
     nm = noisemapper_create(bps)
     if (isReverse .and. (.not. isHard)) then
         call noisemapper_set_monotonicity(nm)
+        ! Allocates the monotonicity configuration and sets the default
+        if (editConfig) then
+            i_snr = monoConfig ! i_snr is opportunistically used as a temporary variable
+            do ii = 0, nm%M-1
+                if (iand(i_snr, 1) == 0) then
+                    nm%monotonicity_configuration(ii) = .false.
+                else
+                    nm%monotonicity_configuration(ii) = .true.
+                end if
+                i_snr = ishft(i_snr, -1)
+            end do
+        end if
     end if
 
     i_snr = 1
