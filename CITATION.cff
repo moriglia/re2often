@@ -1,0 +1,14 @@
+abstract: <p>Fortran Implementation of Reverse Reconciliation Softening (RRS), suitable
+  for PAM and QAM modulated CV-QKD systems.</p>
+authors:
+- family-names: Origlia
+  given-names: Marco
+  orcid: 0000-0003-4901-4350
+cff-version: 1.2.0
+date-released: '2025-04-15'
+doi: 10.5281/zenodo.15222665
+license:
+- cc-by-4.0
+message: If you use this software, please cite it using the metadata from this file.
+title: 'Re2often: (Re)verse (Re)conciliation Softening in Fortran'
+type: software
