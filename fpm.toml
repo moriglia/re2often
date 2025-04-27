@@ -34,6 +34,11 @@ name = "mi-biawgn"
 source-dir = "programs"
 main = "mi_biawgn.f90"
 
+[[executable]]
+name = "cfg-list"
+source-dir = "programs"
+main = "configurations_list.f90"
+
 [executable.dependencies]
 forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
 IO-Fortran-Library = { git="https://github.com/acbbullock/IO-Fortran-Library", branch="main" }
