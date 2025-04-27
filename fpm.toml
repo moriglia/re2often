@@ -2,7 +2,7 @@ name="re2often"
 description="Reverse Reconciliation (Re^2) S(Z=2)oftening toolbox"
 license="GPL-3.0-or-later"
 author="Marco Origlia"
-copyright="Copyright (C) 2024, Marco Origlia"
+copyright="Copyright (C) 2024 - 2025, Marco Origlia"
 
 [build]
 auto-executables = false
