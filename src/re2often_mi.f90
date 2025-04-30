@@ -21,7 +21,7 @@ module re2often_mi
     use, intrinsic :: iso_c_binding
     use re2often_noisemapper
     use external_hermite
-    use quadpack, only: dqags, dqagi
+    use quadpack, only: dqags
     implicit none
 
     private
@@ -298,10 +298,6 @@ contains
         ! Lenw = 400
 
         call noisemapper_update_N0_from_snrdb(nm, snrdb)
-
-        ! call dqagi(f_integrand_soft_direct, 0d0, 2, 1d-12, 1d-6, &
-        !     I, Abserr, Neval, Ier, &
-        !     Limit, Lenw, Last, Iwork, Work)
 
         I = - hermite(20, f_integrand_GH, Ier)
 
