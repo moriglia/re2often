@@ -138,6 +138,29 @@ contains
     end subroutine noisemapper_deallocate
 
 
+    module subroutine noisemapper_set_symbol_probabilities(nm, probabilities)
+        !! Allocate and set probability vector for imput constellation symbols
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+        real(c_double), intent(in), optional :: probabilities(0:nm%M-1)
+        !! Input probabilities
+
+        if (allocated(nm%probabilities) .and. (size(nm%probabilities)/=nm%M)) then
+            deallocate(nm%probabilities)
+        end if
+        if (.not. allocated(nm%probabilities)) then
+            allocate(nm%probabilities(0:nm%M-1))
+        end if
+
+        if (.not. present(probabilities)) then
+            nm%probabilities = 1d0/real(nm%M, c_double)
+        else
+            nm%probabilities = probabilities
+        end if
+        nm%E_s = sum(nm%probabilities * abs(nm%constellation)**2)
+    end subroutine noisemapper_set_symbol_probabilities
+
+
     module function noisemapper_create(bps) result(nm)
         !! Create the nm object
         integer(c_int), intent(in) :: bps
@@ -154,12 +177,10 @@ contains
         nm%M   = ishft(1, bps)
 
         allocate(nm%constellation(0:nm%M-1))
-        allocate(nm%probabilities(0:nm%M-1))
         nm%constellation = [(real(1-nm%M, c_double) + real(2*i, c_double), &
             i = 0, nm%M-1) ]
-        nm%probabilities = 1d0/real(nm%M, c_double)
 
-        nm%E_s = sum(nm%probabilities * abs(nm%constellation)**2)
+        call noisemapper_set_symbol_probabilities(nm)
 
         allocate(nm%s_to_b(0:nm%M-1 , 0:nm%bps-1))
         do i = 0, nm%M-1
