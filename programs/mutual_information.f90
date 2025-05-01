@@ -49,6 +49,7 @@ program mutual_information
     logical :: isEntropy      ! Whether to evaluate the raw key entropy instead (implies reverse+hard)
     logical :: editConfig     ! Whether to perform the calculation for a specific monotonicity configuration
     integer :: monoConfig     ! Selected monotonicity configuration
+    logical :: bWise          ! Bitwise mutual information?
 
     ! +-------------+
     ! | Output data |
@@ -98,6 +99,7 @@ program mutual_information
     uniform_th = .false.
     isEntropy = .false.
     editConfig = .false.
+    bWise = .false.
 
     ii = 1
     do while(ii <= argc)
@@ -133,6 +135,9 @@ program mutual_information
             editConfig = .true.
             read(argv(ii + 1), *) monoConfig
             ii = ii + 2
+        elseif(argv(ii) == "-b") then
+            bWise = .true.
+            ii = ii + 1
         else
             print *, "Unrecognized argument: ", argv(ii)
             stop
@@ -217,7 +222,10 @@ program mutual_information
                     outdata(i_snr, 3)[1] = I_hard_reverse_equidistant_th(outdata(i_snr, 1)[1])
                 end if
             else
-                if (uniform_th) then
+                if (bWise) then
+                    outdata(i_snr, 3)[1] = &
+                        I_soft_reverse_bitwise(outdata(i_snr,1)[1], uf=uniform_th)
+                elseif (uniform_th) then
                     outdata(i_snr, 3)[1] = I_soft_reverse_uniform_output_th(outdata(i_snr, 1)[1])
                 else
                     outdata(i_snr, 3)[1] = I_soft_reverse_equidistant_th(outdata(i_snr, 1)[1])

@@ -30,13 +30,27 @@ module re2often_mi
     public :: I_direct
     public :: H_Xhat, H_Xhat_cond_X
     public :: log0
-    public :: f_soft_reverse
+    public :: f_soft_reverse, f_n_xhat_cond_x
 
     type(noisemapper_type) :: nm
 
     public :: nm
 
     real(c_double), parameter :: sq2 = sqrt(2d0)
+
+    interface
+        module function I_soft_reverse_bitwise(snrdb, thresholds, uf) result (I)
+            real(c_double), intent(in) :: snrdb
+            !! SNR [dB] at which to calculate the mutual information
+            real(c_double), intent(in), optional :: thresholds(1:nm%M-1)
+            !! Decision Thresholds, overrides `uf`
+            logical, intent(in), optional :: uf
+            !! Flag for uniform output thresholds
+            real(c_double) :: I
+        end function I_soft_reverse_bitwise
+    end interface
+
+    public :: I_soft_reverse_bitwise
 
 contains
 
