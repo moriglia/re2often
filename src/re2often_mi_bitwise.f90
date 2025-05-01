@@ -20,7 +20,7 @@ submodule (re2often_mi) re2often_mi_bitwise
     !! Bitwise mutual information
 
 contains
-    module subroutine compute_pdf_N_B0_cond_X(n, a_j, S, tau)
+    module subroutine compute_pdf_N_B1_cond_X(n, a_j, S, tau)
         !! Computes \(f_{N,B_l|X}(n, 1| a_j)\)
         !! for all \(l\in 1, \dots,\log_2M\
         !! and \(f_{N|X}(n| a_j)\)
@@ -48,7 +48,7 @@ contains
                 end if
             end do
         end do
-    end subroutine compute_pdf_N_B0_cond_X
+    end subroutine compute_pdf_N_B1_cond_X
 
 
     module function f_bitwise(n) result(f)
@@ -65,14 +65,14 @@ contains
         f = 0
 
         do a_j = 0, nm%M-1
-            call compute_pdf_N_B0_cond_X(n, a_j, S, tau)
+            call compute_pdf_N_B1_cond_X(n, a_j, S, tau)
             f = f + nm%probabilities(a_j) * &
                 (sum(tau * log0(tau) + (S-tau) * log0(S-tau)) - nm%M*S*log0(S))
         end do
     end function f_bitwise
 
 
-    module function H_Bl(nm) result(H)
+    module function H_Bl_reverse(nm) result(H)
         !! Entropy of the received bits
         !! NOTE that it is not scaled to log2
         type(noisemapper_type), intent(in) :: nm
@@ -94,7 +94,7 @@ contains
         ! Now H contains the probability that bit l is 1
 
         H = - H * log0(H) - (1-H) * log0(1-H)
-    end function H_Bl
+    end function H_Bl_Reverse
 
     module function I_soft_reverse_bitwise(snrdb, thresholds, uf) result (I)
         real(c_double), intent(in) :: snrdb
@@ -139,7 +139,7 @@ contains
             print '("Error at ", f10.3, " [dB]: error ", i1)', snrdb, Ier
         end if
 
-        I = I + sum(H_Bl(nm))
+        I = I + sum(H_Bl_reverse(nm))
         I = I/log(2d0)
     end function I_soft_reverse_bitwise
 end submodule re2often_mi_bitwise
