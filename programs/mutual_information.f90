@@ -232,7 +232,11 @@ program mutual_information
                 end if
             end if
         else
-            outdata(i_snr, 3)[1] = I_direct(outdata(i_snr, 1)[1])
+            if (bWise) then
+                outdata(i_snr, 3)[1] = I_direct_bitwise(outdata(i_snr, 1)[1])
+            else
+                outdata(i_snr, 3)[1] = I_direct(outdata(i_snr, 1)[1])
+            end if
         end if
     end do loop_snr
 

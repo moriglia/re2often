@@ -50,7 +50,15 @@ module re2often_mi
         end function I_soft_reverse_bitwise
     end interface
 
-    public :: I_soft_reverse_bitwise
+    interface
+        module function I_direct_bitwise(snrdb) result(I)
+            real(c_double), intent(in) :: snrdb
+            !! SNR [dB] at which to calculate the mutual information
+            real(c_double) :: I
+        end function I_direct_bitwise
+    end interface
+
+    public :: I_soft_reverse_bitwise, I_direct_bitwise
 
 contains
 
