@@ -22,6 +22,7 @@ program reverse_reconciliation
     use io_fortran_lib, only: from_file, to_file
     use stdlib_random, only: stdlib_random_seed => random_seed
     use stdlib_stats_distribution_normal, only: rvs_normal
+    use stdlib_stats_distribution_uniform, only: rvs_uniform
     ! use re2often_noise_mapper, only: TNoiseMapper
     use re2often_noisemapper
     use re2often_utils, only: save_data, make_directory_and_file_name
@@ -52,6 +53,7 @@ program reverse_reconciliation
     logical :: tanner_header  ! Whether tanner file has a header
     logical :: onlyinfo       ! Whether to compare only the first N-M bits, instead of whole frame
     logical :: doEve          ! Eve is performing error correction
+    logical :: useInterleaver ! Scramble bits
 
     integer, allocatable :: edge_definition(:,:)
 
@@ -131,6 +133,7 @@ program reverse_reconciliation
     onlyinfo = .false.
     tanner_header = .false.
     doEve = .false.
+    useInterleaver = .false.
 
     i = 1
     do while(i <= argc)
@@ -187,6 +190,9 @@ program reverse_reconciliation
             i = i + 1
         elseif (argv(i) == "--eve" ) then
             doEve = .true.
+            i = i + 1
+        elseif (argv(i) == "--interleaver") then
+            useInterleaver = .true.
             i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
@@ -364,14 +370,15 @@ program reverse_reconciliation
             ! AWGN channel
             y    = rvs_normal(loc=y, scale=nm%sigma)
 
-            ! Bob evaluates the soft metric, takes the decisions and evaluates the syndrome
+            ! Bob evaluates the soft metric, takes the decisions
             if (isHard) then
                 xhat = noisemapper_decide_symbol(nm, y)
             else
                 call noisemapper_generate_soft_metric(nm, y, nhat, xhat)
             end if
             word = noisemapper_symbol_to_word(nm, xhat)
-            synd = decoder%word_to_synd(word)
+            ! syndrome computation is postponed, so that the same shuffling
+            ! applies to the word and the lappr arrays
 
             ! Alice uses the soft metric to find the output
             if (isHard) then
@@ -383,6 +390,10 @@ program reverse_reconciliation
             end if
             lappr = alpha*lappr
 
+            if (useInterleaver) then
+                call shuffle_word_and_lappr(word, lappr)
+            end if
+            synd = decoder%word_to_synd(word)
             N_iter = max_iter
             call decoder%decode(lappr, lappr_out, synd, N_iter)
 
@@ -461,4 +472,32 @@ program reverse_reconciliation
             call save_data(outdata, output_root, bps, .true., isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr, alpha)
         end if
     end if
+
+contains
+
+    subroutine shuffle_word_and_lappr(word, lappr)
+        logical, intent(inout) :: word(0:)
+        double precision, intent(inout) :: lappr(0:size(word)-1)
+
+        double precision :: tmp
+        integer :: i, n, j
+
+        n = size(word)
+
+        do i = 0, n-2 ! Number of currently shuffled elements
+            ! Number of unshaffled elements is n-i
+            j = i + rvs_uniform(n-1-i) ! Pick one of the remaining unshaffled elements
+            if (i /= j) then
+                ! Swap word bits
+                word(i) = word(i) .neqv. word(j)
+                word(j) = word(i) .neqv. (.not. word(j))
+                word(i) = word(i) .neqv. (.not. word(j))
+
+                ! Swap lappr data
+                tmp = lappr(i)
+                lappr(i) = lappr(j)
+                lappr(j) = tmp
+            end if
+        end do
+    end subroutine shuffle_word_and_lappr
 end program reverse_reconciliation
