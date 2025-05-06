@@ -58,7 +58,19 @@ module re2often_mi
         end function I_direct_bitwise
     end interface
 
-    public :: I_soft_reverse_bitwise, I_direct_bitwise
+    interface
+        module function I_hard_reverse_bitwise(snrdb, thresholds, uf) result (I)
+            real(c_double), intent(in) :: snrdb
+            !! SNR [dB] at which to calculate the mutual information
+            real(c_double), intent(in), optional :: thresholds(1:nm%M-1)
+            !! Decision Thresholds, overrides `uf`
+            logical, intent(in), optional :: uf
+            !! Flag for uniform output thresholds
+            real(c_double) :: I
+        end function I_hard_reverse_bitwise
+    end interface
+
+    public :: I_soft_reverse_bitwise, I_direct_bitwise, I_hard_reverse_bitwise
 
 contains
 

@@ -216,7 +216,9 @@ program mutual_information
             outdata(i_snr, 3)[1] = H_Xhat(nm)
         elseif (isReverse) then
             if (isHard) then
-                if (uniform_th) then
+                if (bWise) then
+                    outdata(i_snr, 3)[1] = I_hard_reverse_bitwise(outdata(i_snr, 1)[1])
+                elseif (uniform_th) then
                     outdata(i_snr, 3)[1] = I_hard_reverse_uniform_output_th(outdata(i_snr, 1)[1])
                 else
                     outdata(i_snr, 3)[1] = I_hard_reverse_equidistant_th(outdata(i_snr, 1)[1])

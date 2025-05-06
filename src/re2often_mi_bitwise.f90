@@ -100,7 +100,7 @@ contains
         ! Now H contains the probability that bit l is 1
 
         H = - H * log0(H) - (1-H) * log0(1-H)
-    end function H_Bl_Reverse
+    end function H_Bl_reverse
 
     module function I_soft_reverse_bitwise(snrdb, thresholds, uf) result (I)
         real(c_double), intent(in) :: snrdb
@@ -237,4 +237,56 @@ contains
 
         I = (I + sum(H_Bl_direct())) / log(2d0)
     end function I_direct_bitwise
+
+
+
+    ! +-----------------------------+
+    ! | Hard reverse reconciliation |
+    ! +-----------------------------+
+    module function I_hard_reverse_bitwise(snrdb, thresholds, uf) result (I)
+        real(c_double), intent(in) :: snrdb
+        !! SNR [dB] at which to calculate the mutual information
+        real(c_double), intent(in), optional :: thresholds(1:nm%M-1)
+        !! Decision Thresholds, overrides `uf`
+        logical, intent(in), optional :: uf
+        !! Flag for uniform output thresholds
+        real(c_double) :: I
+
+
+        real(c_double) :: tau(0:nm%bps-1)
+        integer :: j, k, l
+
+        call noisemapper_update_N0_from_snrdb(nm, snrdb)
+        if (present(thresholds)) then
+            call noisemapper_set_y_thresholds(nm, thresholds)
+        elseif (present(uf)) then
+            if (uf) then
+                call noisemapper_set_y_thresholds_uniform(nm)
+            else
+                goto 100
+            end if
+        else
+            goto 100
+        end if
+        goto 101
+
+100     call noisemapper_set_y_thresholds(nm)
+101     call noisemapper_update_hard_reverse_tables(nm)
+
+        I = 0
+        do j = 0, nm%M-1
+            tau = 0
+            do k = 0, nm%M-1
+                do l = 0, nm%bps-1
+                    if (nm%s_to_b(k,l)) then
+                        tau(l) = tau(l) + nm%fwd_probabilities(j, k)
+                    end if
+                end do
+            end do
+            I = I + nm%probabilities(j) * sum(tau * log0(tau))
+            tau = 1-tau
+            I = I + nm%probabilities(j) * sum(tau * log0(tau))
+        end do
+        I = I + sum(H_Bl_reverse(nm))
+    end function I_hard_reverse_bitwise
 end submodule re2often_mi_bitwise
