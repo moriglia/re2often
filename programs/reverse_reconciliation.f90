@@ -474,7 +474,6 @@ program reverse_reconciliation
     end if
 
 contains
-
     subroutine shuffle_word_and_lappr(word, lappr)
         logical, intent(inout) :: word(0:)
         double precision, intent(inout) :: lappr(0:size(word)-1)
@@ -490,8 +489,8 @@ contains
             if (i /= j) then
                 ! Swap word bits
                 word(i) = word(i) .neqv. word(j)
-                word(j) = word(i) .neqv. (.not. word(j))
-                word(i) = word(i) .neqv. (.not. word(j))
+                word(j) = word(i) .neqv. word(j)
+                word(i) = word(i) .neqv. word(j)
 
                 ! Swap lappr data
                 tmp = lappr(i)

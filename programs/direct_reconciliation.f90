@@ -323,8 +323,8 @@ contains
             if (i /= j) then
                 ! Swap word bits
                 word(i) = word(i) .neqv. word(j)
-                word(j) = word(i) .neqv. (.not. word(j))
-                word(i) = word(i) .neqv. (.not. word(j))
+                word(j) = word(i) .neqv. word(j)
+                word(i) = word(i) .neqv. word(j)
 
                 ! Swap lappr data
                 tmp = lappr(i)
