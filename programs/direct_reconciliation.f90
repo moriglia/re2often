@@ -47,6 +47,7 @@ program direct_reconciliation
     logical :: tanner_header  ! Whether tanner file has a header
     logical :: onlyinfo       ! Whether to compare only the first N-M bits, instead of whole frame
     logical :: useInterleaver ! Apply random shuffling to bits
+    logical :: encodingNatural ! Use natural encoding for bit to symbol mapping
 
     integer, allocatable :: edge_definition(:,:)
     double precision, allocatable, target :: outdata(:,:)
@@ -103,6 +104,7 @@ program direct_reconciliation
     onlyinfo = .false.
     tanner_header = .false.
     useInterleaver = .false.
+    encodingNatural = .false.
 
 
     i = 1
@@ -143,6 +145,9 @@ program direct_reconciliation
             i = i + 1
         elseif (argv(i) == "--interleaver") then
             useInterleaver = .true.
+            i = i + 1
+        elseif (argv(i) == "--natural") then
+            encodingNatural = .true.
             i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
@@ -213,6 +218,10 @@ program direct_reconciliation
     allocate(synd(decoder%cnum))
 
     nm = noisemapper_create(bps)
+
+    if (encodingNatural) then
+        call noisemapper_set_encoding_natural(nm)
+    end if
 
     if (me == 1) then
         call progress_bar%initialize(&
