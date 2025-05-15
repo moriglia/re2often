@@ -54,6 +54,7 @@ program reverse_reconciliation
     logical :: onlyinfo       ! Whether to compare only the first N-M bits, instead of whole frame
     logical :: doEve          ! Eve is performing error correction
     logical :: useInterleaver ! Scramble bits
+    logical :: encodingNatural ! Use natural encoding
 
     integer, allocatable :: edge_definition(:,:)
 
@@ -134,6 +135,7 @@ program reverse_reconciliation
     tanner_header = .false.
     doEve = .false.
     useInterleaver = .false.
+    encodingNatural = .false.
 
     i = 1
     do while(i <= argc)
@@ -193,6 +195,9 @@ program reverse_reconciliation
             i = i + 1
         elseif (argv(i) == "--interleaver") then
             useInterleaver = .true.
+            i = i + 1
+        elseif (argv(i) == "--natural") then
+            encodingNatural = .true.
             i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
@@ -284,6 +289,9 @@ program reverse_reconciliation
     allocate(synd(decoder%cnum))
 
     nm = noisemapper_create(bps)
+    if (encodingNatural) then
+        call noisemapper_set_encoding_natural(nm)
+    end if
     if (.not. isHard) then
         call noisemapper_set_monotonicity(nm)
     end if
