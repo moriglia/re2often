@@ -169,7 +169,7 @@ contains
         !! Noise mapper
         !! This function will not setup N0
 
-        integer :: i, k
+        integer :: i
 
         call noisemapper_deallocate(nm)
 
@@ -183,12 +183,36 @@ contains
         call noisemapper_set_symbol_probabilities(nm)
 
         allocate(nm%s_to_b(0:nm%M-1 , 0:nm%bps-1))
+        call noisemapper_set_encoding_gray(nm)
+    end function noisemapper_create
+
+
+    module subroutine noisemapper_set_encoding_gray(nm)
+        !! Set Gray encoding
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+
+        integer :: i, k
         do i = 0, nm%M-1
             do k = 0, nm%bps - 1
                 nm%s_to_b(i, k) = iand(ishft(ishft(i, -k)+1, -1), 1)==1
             end do
         end do
-    end function noisemapper_create
+    end subroutine noisemapper_set_encoding_gray
+
+
+    module subroutine noisemapper_set_encoding_natural(nm)
+        !! Set Gray encoding
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+
+        integer :: i, k
+        do i = 0, nm%M-1
+            do k = 0, nm%bps - 1
+                nm%s_to_b(i, k) = iand(ishft(i, -k), 1)==1
+            end do
+        end do
+    end subroutine noisemapper_set_encoding_natural
 
 
     module subroutine noisemapper_update_N0_from_snrdb(nm, snrdb)

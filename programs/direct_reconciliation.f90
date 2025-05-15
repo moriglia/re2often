@@ -26,6 +26,7 @@ program direct_reconciliation
     use forbear, only: bar_object
     use stdlib_random, only: stdlib_random_seed => random_seed
     use stdlib_stats_distribution_normal, only: rvs_normal
+    use stdlib_stats_distribution_uniform, only: rvs_uniform
     implicit none
 
     integer :: argc
@@ -45,6 +46,8 @@ program direct_reconciliation
     integer :: max_iter       ! Maximum number of LDPC iterations
     logical :: tanner_header  ! Whether tanner file has a header
     logical :: onlyinfo       ! Whether to compare only the first N-M bits, instead of whole frame
+    logical :: useInterleaver ! Apply random shuffling to bits
+    logical :: encodingNatural ! Use natural encoding for bit to symbol mapping
 
     integer, allocatable :: edge_definition(:,:)
     double precision, allocatable, target :: outdata(:,:)
@@ -100,6 +103,8 @@ program direct_reconciliation
     output_root = "./res/rate1d2"
     onlyinfo = .false.
     tanner_header = .false.
+    useInterleaver = .false.
+    encodingNatural = .false.
 
 
     i = 1
@@ -137,6 +142,12 @@ program direct_reconciliation
             i = i + 1
         elseif (argv(i) == "-th") then
             tanner_header = .true.
+            i = i + 1
+        elseif (argv(i) == "--interleaver") then
+            useInterleaver = .true.
+            i = i + 1
+        elseif (argv(i) == "--natural") then
+            encodingNatural = .true.
             i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
@@ -208,6 +219,10 @@ program direct_reconciliation
 
     nm = noisemapper_create(bps)
 
+    if (encodingNatural) then
+        call noisemapper_set_encoding_natural(nm)
+    end if
+
     if (me == 1) then
         call progress_bar%initialize(&
             filled_char_string='+', prefix_string='SNR points progress |',&
@@ -224,12 +239,15 @@ program direct_reconciliation
             call noisemapper_random_symbol(nm, x_i)
             y    = noisemapper_symbol_index_to_value(nm, x_i)
             word = logical(noisemapper_symbol_to_word(nm, x_i)) ! from logical 1 to logical 4
-            synd = decoder%word_to_synd(word)
 
             y    = rvs_normal(loc=y, scale=nm%sigma)
 
             call noisemapper_y_to_lappr(nm, y, lappr)
 
+            if (useInterleaver) then
+                call shuffle_word_and_lappr(word, lappr)
+            end if
+            synd = decoder%word_to_synd(word)
 
             N_iter = max_iter
             call decoder%decode(lappr, lappr_out, synd, N_iter)
@@ -298,4 +316,30 @@ program direct_reconciliation
         call save_data(outdata, output_root, bps, .false., .false., snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
     end if
 
+contains
+    subroutine shuffle_word_and_lappr(word, lappr)
+        logical, intent(inout) :: word(0:)
+        double precision, intent(inout) :: lappr(0:size(word)-1)
+
+        double precision :: tmp
+        integer :: i, n, j
+
+        n = size(word)
+
+        do i = 0, n-2 ! Number of currently shuffled elements
+            ! Number of unshaffled elements is n-i
+            j = i + rvs_uniform(n-1-i) ! Pick one of the remaining unshaffled elements
+            if (i /= j) then
+                ! Swap word bits
+                word(i) = word(i) .neqv. word(j)
+                word(j) = word(i) .neqv. word(j)
+                word(i) = word(i) .neqv. word(j)
+
+                ! Swap lappr data
+                tmp = lappr(i)
+                lappr(i) = lappr(j)
+                lappr(j) = tmp
+            end if
+        end do
+    end subroutine shuffle_word_and_lappr
 end program
