@@ -50,6 +50,7 @@ program mutual_information
     logical :: editConfig     ! Whether to perform the calculation for a specific monotonicity configuration
     integer :: monoConfig     ! Selected monotonicity configuration
     logical :: bWise          ! Bitwise mutual information?
+    logical :: encodingNatural ! Implies bWise
 
     ! +-------------+
     ! | Output data |
@@ -100,6 +101,7 @@ program mutual_information
     isEntropy = .false.
     editConfig = .false.
     bWise = .false.
+    encodingNatural = .false.
 
     ii = 1
     do while(ii <= argc)
@@ -136,6 +138,10 @@ program mutual_information
             read(argv(ii + 1), *) monoConfig
             ii = ii + 2
         elseif(argv(ii) == "-b") then
+            bWise = .true.
+            ii = ii + 1
+        elseif (argv(ii) == "--natural") then
+            encodingNatural = .true.
             bWise = .true.
             ii = ii + 1
         else
@@ -177,6 +183,9 @@ program mutual_information
     ! I            => outdata(:, 3)[1]
 
     nm = noisemapper_create(bps)
+    if (encodingNatural) then
+        call noisemapper_set_encoding_natural(nm)
+    end if
     if (isReverse .and. (.not. isHard)) then
         call noisemapper_set_monotonicity(nm)
         ! Allocates the monotonicity configuration and sets the default
