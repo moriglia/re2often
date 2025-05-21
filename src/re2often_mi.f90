@@ -22,6 +22,7 @@ module re2often_mi
     use re2often_noisemapper
     use external_hermite
     use quadpack, only: dqags
+    use stdlib_stats_distribution_normal, only: pdf_normal
     implicit none
 
     private
@@ -72,6 +73,80 @@ module re2often_mi
 
     public :: I_soft_reverse_bitwise, I_direct_bitwise, I_hard_reverse_bitwise
 
+    ! +---------------------------+
+    ! | GMI functions and members |
+    ! +---------------------------+
+
+    abstract interface
+        function q_hard(a_i, a_j) result(q)
+            !! Compute the decoding metric using only hard information
+            import
+            integer(c_int), intent(in) :: a_i
+            !! Alphabet index of the symbol ( either \(X\) or \(\hat{X}\)
+            integer(c_int), intent(in) :: a_j
+            !! Alphabet index of the other variable
+            real(c_double) :: q
+        end function q_hard
+        function q_soft_direct(x, y) result(q)
+            !! compute the decoding metric using soft information for the direct channel
+            import
+            integer(c_int), intent(in) :: x
+            !! Alphabet index of the transmitted symbol
+            real(c_double), intent(in) :: y
+            !! Received channel output
+            real(c_double) :: q
+        end function q_soft_direct
+    end interface
+
+    interface
+        module function I_s_map_hard_reverse(q, s) result(I_s)
+            !! GMI for MAP criterion with hard information only, reverse direction
+            procedure(q_hard) :: q
+            !! Function that computes the metric
+            real(c_double), intent(in), optional :: s
+            !! Positive parameter s of the GMI
+            real(c_double) :: I_s
+            !! GMI(s)
+        end function I_s_map_hard_reverse
+        module function q_map_hard_product(xhat, x) result (q)
+            integer(c_int), intent(in) :: xhat
+            integer(c_int), intent(in) :: x
+            real(c_double) :: q
+        end function q_map_hard_product
+        module function q_map_hard_opt(xhat, x) result(q)
+            integer(c_int), intent(in) :: xhat
+            integer(c_int), intent(in) :: x
+            real(c_double) :: q
+        end function q_map_hard_opt
+    end interface
+
+    interface
+        module function I_s_map_soft_direct(q, s) result(I_s)
+            !! GMI for MAP criterion with hard information only, reverse direction
+            procedure(q_soft_direct) :: q
+            !! Function that computes the metric
+            real(c_double), intent(in), optional :: s
+            !! Positive parameter s of the GMI
+            real(c_double) :: I_s
+            !! GMI(s)
+        end function I_s_map_soft_direct
+
+        module function q_map_soft_direct_prod(x, y) result (q)
+            integer(c_int), intent(in) :: x
+            real(c_double), intent(in) :: y
+            real(c_double) :: q
+        end function q_map_soft_direct_prod
+    end interface
+
+
+    procedure(q_soft_direct), pointer :: qfun_sd
+    real(c_double), parameter :: sqrtPi = sqrt(acos(-1d0))
+    real(c_double) :: sqrtN0
+
+    public :: sqrtN0, qfun_sd
+    public :: I_s_map_hard_reverse, I_s_map_soft_direct
+    public :: q_map_hard_product, q_map_hard_opt
+    public :: q_map_soft_direct_prod
 contains
 
     real(c_double) elemental function log0(arg, base) result(l)

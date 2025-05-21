@@ -30,6 +30,11 @@ source-dir = "programs"
 main = "mutual_information_optimal_pam4.f90"
 
 [[executable]]
+name = "gmi"
+source-dir = "programs"
+main = "gmi.f90"
+
+[[executable]]
 name = "bpsk"
 source-dir = "programs"
 main = "bpsk.f90"
