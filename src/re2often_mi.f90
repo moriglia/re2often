@@ -139,6 +139,20 @@ module re2often_mi
     end interface
 
 
+    interface
+        module function I_s_ml_hard_direct(q, s) result (I_s)
+        procedure(q_hard) :: q
+        real(c_double), intent(in), optional :: s
+        real(c_double) :: I_s
+    end function I_s_ml_hard_direct
+
+    module function q_ml_hard_direct_prod(x, xhat) result(q)
+        integer(c_int), intent(in) :: x
+        integer(c_int), intent(in) :: xhat
+        real(c_double) :: q
+    end function q_ml_hard_direct_prod
+    end interface
+
     procedure(q_soft_direct), pointer :: qfun_sd
     real(c_double), parameter :: sqrtPi = sqrt(acos(-1d0))
     real(c_double) :: sqrtN0
@@ -147,6 +161,9 @@ module re2often_mi
     public :: I_s_map_hard_reverse, I_s_map_soft_direct
     public :: q_map_hard_product, q_map_hard_opt
     public :: q_map_soft_direct_prod
+
+    public :: I_s_ml_hard_direct
+    public :: q_ml_hard_direct_prod
 contains
 
     real(c_double) elemental function log0(arg, base) result(l)

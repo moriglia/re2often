@@ -240,4 +240,69 @@ contains
     end function q_map_soft_direct_prod
 
 
+    ! +----------------+
+    ! | ML hard direct |
+    ! +----------------+
+    module function I_s_ml_hard_direct(q, s) result (I_s)
+        procedure(q_hard) :: q
+        real(c_double), intent(in), optional :: s
+        real(c_double) :: I_s
+
+        real(c_double) :: q_buff(0:nm%M-1)
+        real(c_double) :: tmp
+        integer :: xhat, x
+
+        real(c_double) :: s_local
+
+        if (present(s)) then
+            s_local = s
+        else
+            s_local = 1d0
+        end if
+
+        I_s = 0
+        do xhat = 0, nm%M-1
+            do x = 0, nm%M-1
+                q_buff(x) = q(x, xhat)
+            end do
+
+            tmp = 0
+            do x = 0, nm%M-1
+                tmp = tmp + nm%fwd_probabilities(x, xhat)*nm%probabilities(x) &
+                    * log0(q_buff(x))
+            end do
+            tmp = s_local * tmp &
+                - nm%delta_Fy(xhat) * log0(sum(nm%probabilities * q_buff**s_local))
+            I_s = I_s + tmp
+        end do
+
+        I_s = I_s / log(2d0)
+    end function I_s_ml_hard_direct
+
+
+    module function q_ml_hard_direct_prod(x, xhat) result(q)
+        integer(c_int), intent(in) :: x
+        integer(c_int), intent(in) :: xhat
+        real(c_double) :: q
+
+        integer :: x_local, l
+
+        real(c_double) :: frac_n, frac_d
+
+        q = 1d0
+
+        do l = 0, nm%bps - 1
+            frac_n = 0
+            frac_d = 0
+            do x_local = 0, nm%M-1
+                if (nm%s_to_b(x_local, l) .eqv. nm%s_to_b(x, l)) then
+                    frac_n = frac_n &
+                        + nm%probabilities(x_local) &
+                        * nm%fwd_probabilities(x_local, xhat)
+                    frac_d = frac_d + nm%probabilities(x_local)
+                end if
+            end do
+            q = q * frac_n / frac_d
+        end do
+    end function q_ml_hard_direct_prod
 end submodule re2often_mi_gmi
