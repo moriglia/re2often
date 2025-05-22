@@ -202,15 +202,14 @@ program gmi
         call noisemapper_update_N0_from_snrdb(nm, outdata(i_snr, 1)[1])
         sqrtN0 = sqrt(nm%N0)
 
+        if (uniform_th) then
+            call noisemapper_set_y_thresholds_uniform(nm)
+        else
+            call noisemapper_set_y_thresholds(nm)
+        end if
+
         if (isReverse) then
             if (isHard) then
-                if (uniform_th) then
-                    call noisemapper_set_y_thresholds_uniform(nm)
-                    ! outdata(i_snr, 3)[1] = I_hard_reverse_uniform_output_th(outdata(i_snr, 1)[1])
-                else
-                    call noisemapper_set_y_thresholds(nm)
-                    ! outdata(i_snr, 3)[1] = I_hard_reverse_equidistant_th(outdata(i_snr, 1)[1])
-                end if
                 call noisemapper_update_hard_reverse_tables(nm)
                 if (useML) then
                     outdata(i_snr, 3)[1] = I_s_ml_hard_direct(q_ml_hard_direct_prod)
@@ -218,10 +217,14 @@ program gmi
                     outdata(i_snr, 3)[1] = I_s_map_hard_reverse(q_map_hard_product)
                 end if
             else
-                if (me == 1) then
-                    print *, "Not implemented"
+                if (useML) then
+                    if (me == 1) then
+                        print *, "Not implemented"
+                    end if
+                    stop
                 end if
-                stop
+                call noisemapper_set_Fy_grids(nm)
+                outdata(i_snr, 3)[1] = I_s_map_soft_reverse(q_map_soft_reverse_prod, useDenominator=.false.)
             end if
         else
             if (useML) then

@@ -21,6 +21,9 @@ submodule (re2often_mi) re2often_mi_gmi
 
     integer(c_int) :: gmi_xtilde
     real(c_double) :: gmi_s
+    logical :: gmi_soft_reverse_useDenominator
+    procedure(q_soft_direct), pointer :: qfun_sd
+    procedure(q_hard_hard_soft), pointer :: qfun_map_reverse_soft
 contains
     ! function expected_metric_hard(q, p, s) result (E_of_q)
     !     !! Compute the expectation of the values given in `q`,
@@ -305,4 +308,135 @@ contains
             q = q * frac_n / frac_d
         end do
     end function q_ml_hard_direct_prod
+
+    ! +------------------+
+    ! | MAP soft reverse |
+    ! +------------------+
+    function f_N_GH_map_expectation_qs(n) result (f)
+        real(c_double), intent(in) :: n
+        real(c_double)             :: f
+
+        integer :: x, xhat
+        real(c_double) :: tmp
+
+        f = 0
+        do x = 0, nm%M-1
+            tmp = 0
+            do xhat = 0, nm%M-1
+                tmp = tmp + f_n_xhat_cond_x(n, xhat, x)
+            end do
+            f = f + tmp * nm%probabilities(x) * qfun_map_reverse_soft(x, gmi_xtilde, n)**gmi_s
+        end do
+    end function f_N_GH_map_expectation_qs
+
+
+    function f_N_GH_map_expectation_log_qs(n) result(f)
+        real(c_double), intent(in) :: n
+        real(c_double)             :: f
+
+        integer        :: x, xhat
+        real(c_double) :: tmp
+
+        f = 0
+        do x = 0, nm%M-1
+            tmp = 0
+            do xhat = 0, nm%M-1
+                tmp = tmp + f_n_xhat_cond_x(n, xhat, x) &
+                    * log0(qfun_map_reverse_soft(x, xhat, n)**gmi_s)
+            end do
+            f = f + nm%probabilities(x) * tmp
+        end do
+    end function f_N_GH_map_expectation_log_qs
+
+
+    module function I_s_map_soft_reverse(q, s, useDenominator) result(I_s)
+        !! GMI-MAP
+        procedure(q_hard_hard_soft)          :: q
+        real(c_double), intent(in), optional :: s
+        logical       , intent(in), optional :: useDenominator
+        real(c_double)                       :: I_s
+
+        ! Data for DQAGS
+        real(c_double) :: Abserr
+        integer :: Neval, Ier, Limit, Lenw, Last
+        integer :: Iwork(100)
+        real(c_double) :: Work(400)
+
+        ! Further auxiliaries
+        real(c_double) :: I_aux
+        integer :: xhat
+
+        Limit = 100
+        Lenw = 400
+
+        if (present(s)) then
+            gmi_s = s
+        else
+            gmi_s = 1d0
+        end if
+
+        if (present(useDenominator)) then
+            gmi_soft_reverse_useDenominator = useDenominator
+        else
+            gmi_soft_reverse_useDenominator = .true.
+        end if
+
+        qfun_map_reverse_soft => q
+
+        call dqags(f_N_GH_map_expectation_log_qs, 0d0, 1d0, 1d-12, 1d-6, &
+            I_s, Abserr, Neval, Ier, &
+            Limit, Lenw, Last, Iwork, Work)
+
+        if (Ier /= 0) then
+            print '("DQAGS error in f_N_GH_map_expectation_log_qs ", i1)', Ier
+        end if
+
+        I_s = I_s * gmi_s
+
+        do xhat = 0, nm%M-1
+            gmi_xtilde = xhat
+            call dqags(f_N_GH_map_expectation_qs, 0d0, 1d0, 1d-12, 1d-6, &
+                I_aux, Abserr, Neval, Ier, &
+                Limit, Lenw, Last, Iwork, Work)
+            if (Ier /= 0) then
+                print '("DQAGS error in f_N_GH_map_expectation_log_qs ", i1)', Ier
+            end if
+            I_s  = I_s - nm%probabilities(xhat) * log0(I_aux)
+        end do
+        I_s = I_s / log(2d0)
+    end function I_s_map_soft_reverse
+
+
+    module function q_map_soft_reverse_prod(x, xhat, n) result(q)
+        integer(c_int), intent(in) :: x
+        integer(c_int), intent(in) :: xhat
+        real(c_double), intent(in) :: n
+        real(c_double)             :: q
+
+        real(c_double) :: f_N_given_X, tmp
+        integer :: l, xhat_var
+
+        q = 1d0
+
+        f_N_given_X = 0
+
+        if (gmi_soft_reverse_useDenominator) then
+            do xhat_var = 0, nm%M-1
+                f_N_given_X = f_N_given_X + f_n_xhat_cond_x(n, xhat_var, x)
+            end do
+        end if
+
+        do l = 0, nm%bps-1
+            tmp = 0
+            do xhat_var = 0, nm%M-1
+                if (nm%s_to_b(xhat, l) .eqv. nm%s_to_b(xhat_var, l)) then
+                    tmp = tmp + f_n_xhat_cond_x(n, xhat_var, x)
+                end if
+            end do
+            q = q * tmp
+        end do
+        if (gmi_soft_reverse_useDenominator) then
+            q = q / (f_N_given_X**nm%bps)
+        end if
+    end function q_map_soft_reverse_prod
 end submodule re2often_mi_gmi
