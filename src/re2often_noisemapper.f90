@@ -215,6 +215,23 @@ contains
     end subroutine noisemapper_set_encoding_natural
 
 
+    module subroutine noisemapper_set_encoding_custom(nm, labels)
+        !! Set custom encoding labels
+        !! @warning: no check on labels being a complete permutation of (0:M-1)
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+        integer, intent(in) :: labels(0:nm%M-1)
+        !! Encoding Labels
+
+        integer :: i, k
+        do i = 0, nm%M-1
+            do k = 0, nm%bps-1
+                nm%s_to_b(i, k) = iand(ishft(labels(i), -k), 1)==1
+            end do
+        end do
+    end subroutine noisemapper_set_encoding_custom
+
+
     module subroutine noisemapper_update_N0_from_snrdb(nm, snrdb)
         !! Update N0 based on the value of the SNR
         type(noisemapper_type), intent(inout) :: nm

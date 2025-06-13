@@ -54,6 +54,7 @@ forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
 IO-Fortran-Library = { git="https://github.com/acbbullock/IO-Fortran-Library", branch="main" }
 fldpc = { git="https://github.com/moriglia/fldpc", tag="v1.1" }
 stdlib = "*"
+FLAP = { git="https://github.com/szaghi/FLAP.git", tag="v1.2.5" }
 
 [library]
 source-dir="src"

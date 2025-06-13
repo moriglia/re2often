@@ -27,6 +27,7 @@ program gmi
     use re2often_utils, only: save_data, make_directory_and_file_name
     use forbear, only: bar_object
     use re2often_mi ! defines a noisemapper_type object
+    use flap ! CLI parser: command_line_interface
     implicit none
 
     ! +---------------------+
@@ -50,6 +51,10 @@ program gmi
     integer :: monoConfig     ! Selected monotonicity configuration
     logical :: encodingNatural
     logical :: useML
+    integer, allocatable :: encodingVector(:)
+
+    type(command_line_interface) :: cli
+    integer :: error
 
     ! +-------------+
     ! | Output data |
@@ -84,9 +89,6 @@ program gmi
     end do
 
 
-    ! +--------------------+
-    ! | Set default values |
-    ! +--------------------+
     ! +------------+
     ! | CLI parser |
     ! +------------+
@@ -154,6 +156,16 @@ program gmi
         act='store_true', &
         def='.false.', &
         error=error)
+    call cli%add(switch='--encoding', &
+        help='Specify the labelling, a permutation of numbers (0,...,2^BPS-1) is expected', &
+        required=.false., &
+        act='store', &
+        nargs='+', &
+        def='0', & ! Does not mean anything, just to prevent the cli to complain
+        error=error)
+
+
+
     call cli%parse(error=error)
     if (error /= 0) stop
 
@@ -167,6 +179,10 @@ program gmi
     call cli%get(switch='-u', val=uniform_th)
     call cli%get(switch='--natural', val=encodingNatural)
     call cli%get(switch='--ml', val=useML)
+
+    if (cli%is_passed(switch='--encoding')) then
+        call cli%get_varying(switch='--encoding', val=encodingVector)
+    end if
 
     editConfig = cli%is_passed(switch="-c")
 
@@ -201,6 +217,11 @@ program gmi
     nm = noisemapper_create(bps)
     if (encodingNatural) then
         call noisemapper_set_encoding_natural(nm)
+        if (me == 1 .and. cli%is_passed(switch='--encoding')) then
+            print *, "Warning: --natural overrides --encoding (ignored)"
+        end if
+    elseif( cli%is_passed(switch='--encoding')) then
+        call noisemapper_set_encoding_custom(nm, encodingVector)
     end if
     if (isReverse .and. (.not. isHard)) then
         call noisemapper_set_monotonicity(nm)
