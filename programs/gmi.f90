@@ -87,60 +87,92 @@ program gmi
     ! +--------------------+
     ! | Set default values |
     ! +--------------------+
-    nsnr = 11
-    snr  = [3.5d0, 4d0]
-    bps  = 2
-    isReverse = .false.
-    isHard = .false.
-    uniform_th = .false.
-    editConfig = .false.
-    encodingNatural = .false.
-    useML = .false.
+    ! +------------+
+    ! | CLI parser |
+    ! +------------+
+    call cli%init(&
+        progname = "GMI", &
+        version  = "0", &
+        authors  = "Marco Origlia", &
+        license  = "GPL-3.0-or-later")
 
-    ii = 1
-    do while(ii <= argc)
-        if (argv(ii) == "--nsnr") then
-            read(argv(ii+1),*) nsnr
-            ii = ii + 2
-            ! print *, "nsnr", nsnr
-        elseif (argv(ii) == "--snr") then
-            read(argv(ii+1), *) snr(1)
-            read(argv(ii+2), *) snr(2)
-            ii = ii+3
-            ! print *, "snr", snr
-        elseif (argv(ii) == "--bps") then
-            read(argv(ii+1),*) bps
-            ii = ii + 2
-            ! print *, "bps", bps
-        elseif (argv(ii) == "--outdir") then
-            call get_command_argument(ii+1, output_root)
-            ii = ii + 2
-        elseif (argv(ii) == "-h") then
-            isHard = .true.
-            ii = ii + 1
-        elseif (argv(ii) == "-r") then
-            isReverse = .true.
-            ii = ii + 1
-        elseif (argv(ii) == "-u") then
-            uniform_th = .true.
-            ii = ii + 1
-        elseif(argv(ii) == "-c") then
-            editConfig = .true.
-            read(argv(ii + 1), *) monoConfig
-            ii = ii + 2
-        elseif (argv(ii) == "--natural") then
-            encodingNatural = .true.
-            ii = ii + 1
-        elseif (argv(ii) == "--ml") then
-            useML = .true.
-            ii = ii + 1
-        else
-            print *, "Unrecognized argument: ", argv(ii)
-            stop
-        end if
-    end do
+    call cli%add(&
+        switch='--nsnr', &
+        help='NSNR value', &
+        required=.true., &
+        act='store', &
+        error=error)
+    call cli%add(switch='--snr', &
+        help='SNR range (2)', &
+        required=.true., &
+        act='store', &
+        nargs='2', &
+        error=error)
+    call cli%add(switch='--bps', &
+        help='Bits per symbol', required=.false., &
+        def='2', &
+        act='store', &
+        error=error)
+    call cli%add(switch='--outdir', &
+        help='Output directory', &
+        required=.true., &
+        act='store', &
+        error=error)
+    call cli%add(switch='--hard', &
+        help='Hard reconciliation (implies "-r")', &
+        required=.false., &
+        act='store_true', &
+        def='.false.', &
+        error=error)
+    call cli%add(switch='-r', &
+        help='Reverse Reconciliation', &
+        required=.false., &
+        act='store_true', &
+        def='.false.', &
+        error=error)
+    call cli%add(switch='-u', &
+        help='Uniform output probability thresholds', &
+        required=.false., &
+        act='store_true', &
+        def='.false.', &
+        error=error)
+    call cli%add(switch='-c', &
+        help='Edit config and monoConfig value', &
+        required=.false., &
+        act='store', &
+        def='0', &
+        error=error)
+    call cli%add(switch='--natural', &
+        help='Use natural encoding', &
+        required=.false., &
+        act='store_true', &
+        def='.false.', &
+        error=error)
+    call cli%add(switch='--ml', &
+        help='Use maximum likelyhood', &
+        required=.false., &
+        act='store_true', &
+        def='.false.', &
+        error=error)
+    call cli%parse(error=error)
+    if (error /= 0) stop
 
-    if (.not. editConfig) then
+    ! Retrieve values
+    call cli%get(switch='--nsnr', val=nsnr)
+    call cli%get(switch='--snr', val=snr)
+    call cli%get(switch='--bps', val=bps)
+    call cli%get(switch='--outdir', val=output_root)
+    call cli%get(switch='--hard', val=isHard)
+    call cli%get(switch='-r', val=isReverse)
+    call cli%get(switch='-u', val=uniform_th)
+    call cli%get(switch='--natural', val=encodingNatural)
+    call cli%get(switch='--ml', val=useML)
+
+    editConfig = cli%is_passed(switch="-c")
+
+    if (editConfig) then
+        call cli%get(switch="-c", val=monoConfig)
+    else
         ! set default configuration
         monoConfig = 2
         do ii = 0, bps - 1
@@ -224,7 +256,8 @@ program gmi
                     stop
                 end if
                 call noisemapper_set_Fy_grids(nm)
-                outdata(i_snr, 3)[1] = I_s_map_soft_reverse(q_map_soft_reverse_prod, useDenominator=.false.)
+                ! outdata(i_snr, 3)[1] = I_s_map_soft_reverse(q_map_soft_reverse_prod, useDenominator=.false.)
+                outdata(i_snr, 3)[1] = I_s_BN_Xhat()
             end if
         else
             if (useML) then

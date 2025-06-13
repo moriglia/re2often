@@ -49,6 +49,9 @@ module re2often_mi
             !! Flag for uniform output thresholds
             real(c_double) :: I
         end function I_soft_reverse_bitwise
+        module function I_s_BN_Xhat() result(I)
+            real(c_double) :: I
+        end function I_s_BN_Xhat
     end interface
 
     interface
@@ -72,6 +75,7 @@ module re2often_mi
     end interface
 
     public :: I_soft_reverse_bitwise, I_direct_bitwise, I_hard_reverse_bitwise
+    public :: I_s_BN_Xhat
 
     ! +---------------------------+
     ! | GMI functions and members |

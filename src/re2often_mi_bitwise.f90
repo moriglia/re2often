@@ -22,6 +22,8 @@ submodule (re2often_mi) re2often_mi_bitwise
     real(c_double), parameter :: pi = acos(-1d0)
     real(c_double), parameter :: sqrtPi = sqrt(pi)
     real(c_double), parameter :: twoSqrt2 = 2*sqrt(2d0)
+
+    integer :: bw_bit_position
 contains
     ! +-----------------------------+
     ! | Soft reverse reconciliation |
@@ -148,6 +150,87 @@ contains
         I = I + sum(H_Bl_reverse(nm))
         I = I/log(2d0)
     end function I_soft_reverse_bitwise
+
+
+    ! +----------------------------------------+
+    ! | alternative definition for the BW case |
+    ! +----------------------------------------+
+    module function I_s_BN_Xhat() result(I_s)
+        ! real(c_double), intent(in) :: snrdb
+        real(c_double)             :: I_s
+
+        integer :: l
+        real(c_double) :: I_s_bit
+
+        ! DQAGS stuff
+        real(c_double) :: Abserr
+        integer :: Neval, Ier, Limit, Lenw, Last
+        integer :: Iwork(100)
+        real(c_double) :: Work(400)
+        Limit = 100
+        Work = 400
+
+        ! Done before calling this function ???
+        ! call noisemapper_update_N0_from_snrdb(nm, snrdb)
+        ! call noisemapper_set_y_thresholds_uniform(nm)
+        ! call noisemapper_set_
+
+        I_s = 0
+        do l  = 0, nm%bps-1
+            bw_bit_position = l
+            call dqags(f_BN_Xhat, 0d0, 1d0, 1d-12, 1d-6, &
+                I_s_bit, Abserr, Neval, Ier, &
+                Limit, Lenw, Last, Iwork, Work)
+            I_s = I_s + I_s_bit
+        end do
+
+        I_s = I_s/log(2d0)
+
+        I_s = I_s + nm%bps * H_Xhat(nm)
+    end function I_s_BN_Xhat
+
+
+    real(c_double) function f_BN_Xhat(n) result(f)
+        real(c_double), intent(in) :: n
+
+        integer :: x, xhat
+
+        real(c_double) :: f_N_cond_X(0:nm%M-1)
+        real(c_double) :: f_N_xhat_cond_x_arr(0:nm%M-1, 0:nm%M-1)
+
+        real(c_double) :: f_N_B1, f_Xhat_N_B1
+
+        f_N_cond_X(:) = 0
+
+        do xhat = 0, nm%M-1
+            do x = 0, nm%M-1
+                f_N_xhat_cond_x_arr(xhat, x) = f_n_xhat_cond_x(n, xhat, x)
+            end do
+        end do
+
+        f_N_cond_X = sum(f_N_xhat_cond_x_arr, 1)
+        do x = 0, nm%M-1
+            if (nm%s_to_b(x, bw_bit_position)) then
+                f_N_B1 = f_N_B1 + nm%probabilities(x) * f_N_cond_X(x)
+            end if
+        end do
+
+        f = 0
+
+        do xhat = 0, nm%M-1
+            f_Xhat_N_B1 = 0
+            do x = 0, nm%M-1
+                if (nm%s_to_b(x, bw_bit_position)) then
+                    f_Xhat_N_B1 = f_Xhat_N_B1 &
+                        + f_N_xhat_cond_x_arr(xhat, x) * nm%probabilities(x)
+                end if
+            end do
+
+            f = f + f_Xhat_N_B1 * (log0(f_Xhat_N_B1) - log0(f_N_B1))
+            f_Xhat_N_B1 = nm%delta_Fy(xhat) - f_Xhat_N_B1
+            f = f + f_Xhat_N_B1 * (log0(f_Xhat_N_B1) - log0(1-f_N_B1))
+        end do
+    end function f_BN_Xhat
 
 
     ! +-----------------------+
