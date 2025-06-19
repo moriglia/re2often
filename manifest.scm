@@ -217,7 +217,7 @@ Fpm's long term vision is to nurture and grow the ecosystem of modern Fortran ap
    (arguments
     `(#:tests? #f))
    (inputs
-    `(("gfortran-toolchain" ,gfortran)
+    `(("gfortran-toolchain" ,gfortran-14)
       ("mpi" ,openmpi)))
    (synopsis "Open Coarrays library")
    (description

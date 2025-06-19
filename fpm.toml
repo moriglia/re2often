@@ -8,6 +8,7 @@ copyright="Copyright (C) 2024 - 2025, Marco Origlia"
 auto-executables = false
 auto-examples = false
 auto-tests = false
+external-modules = ["lincoa_mod"]
 
 [[executable]]
 name = "direct-reconciliation"
@@ -28,6 +29,12 @@ main = "mutual_information.f90"
 name = "mi-opt-pam4"
 source-dir = "programs"
 main = "mutual_information_optimal_pam4.f90"
+
+[[executable]]
+name = "mi-opt"
+source-dir = "programs"
+main = "mi_opt.f90"
+link = "primaf"
 
 [[executable]]
 name = "gmi"

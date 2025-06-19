@@ -480,27 +480,38 @@ contains
     end subroutine noisemapper_deallocate_reverse_hard
 
 
-    module subroutine noisemapper_allocate_reverse_hard(nm)
+    module subroutine noisemapper_allocate_reverse_hard(nm, skipLapprTable)
         !! Allocate transition probability table and lappr table
         type(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
+        logical, intent(in), optional :: skipLapprTable
+        !! Do not allocate LAPPR table
 
         call noisemapper_deallocate_reverse_hard(nm)
 
         allocate(nm%fwd_probabilities(0:nm%M-1, 0:nm%M-1))
+        if (present(skipLapprTable)) then
+            if (skipLapprTable) then
+                return
+            end if
+        end if
         allocate(nm%reverse_hard_lappr_table(0:nm%M-1, 0:nm%bps-1))
     end subroutine noisemapper_allocate_reverse_hard
 
 
-    module subroutine noisemapper_update_hard_reverse_tables(nm)
+    module subroutine noisemapper_update_hard_reverse_tables(nm, skipLapprTable)
         !! Update hard reverse reconciliation tables
         type(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
+        logical, intent(in), optional :: skipLapprTable
+        !! Do not compute LAPPR table
 
         integer :: i, j, k
         real(c_double) :: denominator(0:nm%M-1, 0:nm%bps-1)
 
-        call noisemapper_allocate_reverse_hard(nm)
+        if (present(skipLapprTable)) then
+            call noisemapper_allocate_reverse_hard(nm, skipLapprTable)
+        end if
 
         do i = 0, nm%M - 1
             do j = 0, nm%M-2
@@ -513,6 +524,12 @@ contains
         nm%fwd_probabilities(:, nm%M-1) = 1
         nm%fwd_probabilities(:, 1:nm%M-1) = nm%fwd_probabilities(:, 1:nm%M-1) &
             - nm%fwd_probabilities(:, 0:nm%M-2)
+
+        if (present(skipLapprTable)) then
+            if (skipLapprTable) then
+                return
+            end if
+        end if
 
         denominator(:,:) = 0
         nm%reverse_hard_lappr_table(:,:) = 0

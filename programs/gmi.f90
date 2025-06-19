@@ -277,8 +277,8 @@ program gmi
                     stop
                 end if
                 call noisemapper_set_Fy_grids(nm)
-                ! outdata(i_snr, 3)[1] = I_s_map_soft_reverse(q_map_soft_reverse_prod, useDenominator=.false.)
-                outdata(i_snr, 3)[1] = I_s_BN_Xhat()
+                outdata(i_snr, 3)[1] = I_s_map_soft_reverse(q_map_soft_reverse_prod)
+                ! outdata(i_snr, 3)[1] = I_s_BN_Xhat()
             end if
         else
             if (useML) then
