@@ -10,6 +10,9 @@ auto-examples = false
 auto-tests = false
 external-modules = ["lincoa_mod"]
 
+[preprocess]
+[preprocess.cpp]
+
 [[executable]]
 name = "direct-reconciliation"
 source-dir = "programs"
@@ -33,7 +36,7 @@ main = "mutual_information_optimal_pam4.f90"
 [[executable]]
 name = "mi-opt"
 source-dir = "programs"
-main = "mi_opt.f90"
+main = "mi_opt.F90"
 link = "primaf"
 
 [[executable]]
