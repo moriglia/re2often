@@ -18,7 +18,10 @@ program mi_opt
     !! license: GPL-3.0-or-later
     !!
     !! Find optimal parameters for the MI
-    use iso_fortran_env, only: lock_type, dp => real64
+    use iso_fortran_env, only: &
+        lock_type, &
+        dp => real64, &
+        stdout => output_unit
     use io_fortran_lib, only: from_file, to_file
     use re2often_noisemapper
     use re2often_utils, only: save_data, make_directory_and_file_name
@@ -69,7 +72,9 @@ program mi_opt
     ! | Output data |
     ! +-------------+
     double precision, allocatable, target :: outdata(:,:)[:]
-    logical, allocatable                  :: snr_done(:)[:]
+    integer :: encoding_index[*]
+    integer :: monoconf_index[*]
+    integer :: snrdb_index[*]
     integer, parameter :: o_mi = 3
     integer, parameter :: o_th = 4
     integer            :: o_p  ! = o_th + nm%M-1
@@ -97,6 +102,10 @@ program mi_opt
     integer :: i_snr, ii, i_encoding, i_config
 
     ! --- Code -----------------------------------------------
+
+#define NOT_IMPLEMENTED() \
+    print *, "Not Implemented" ; \
+    stop
 
     me = this_image()
     n_im = num_images()
@@ -188,6 +197,10 @@ program mi_opt
         isReverse = .true. ! --hard implies --reverse
     end if
 
+    if (.not. isReverse) then
+        NOT_IMPLEMENTED()
+    end if
+
     if (isGMI) then
         if (.not. cli%is_passed(switch="--encoding-file")) then
             print *, "--encoding-file <encoding.csv> is mandatory when --gmi is active"
@@ -217,9 +230,15 @@ program mi_opt
     if (me==1) then
         allocate(outdata(nsnr, o_c)[*])
         allocate(header(o_c))
-        allocate(snr_done(nsnr)[*])
-        snr_done(:) = .false.
-        outdata(:,2:) = 0
+
+        encoding_index = 1
+        monoconf_index = 1
+        snrdb_index    = 1
+
+        outdata(:, 2 ) = 0
+        outdata(:, 4:) = 0
+        outdata(:, 3 ) = -1d0
+
 
         header(1) = trim("SNR")
         header(2) = trim("scSNR")
@@ -265,91 +284,116 @@ program mi_opt
 
     sync all ! snr_done(:)[1] is read by all images
 
-    i_snr = 1
-    loop_snr : do while (i_snr .le. nsnr)
+    loop_snr : do while (.true.)
         lock(lck[1])
-        do while(snr_done(i_snr)[1])
-            i_snr = i_snr + 1
-            if (i_snr .gt. nsnr) then
-                unlock(lck[1])
-                exit loop_snr
-            end if
-        end do
-        snr_done(i_snr)[1] = .true.
-        unlock(lck[1])
-
-        call noisemapper_update_N0_from_snrdb(nm, snr_array(i_snr))
-
+        ! Exit if we are about to get an SNR index above nsnr
+        if (snrdb_index[1] .gt. nsnr) then
+            unlock(lck[1])
+            exit loop_snr
+        end if
+        ! Actually get the data
+        i_snr = snrdb_index[1]
         if (isGMI) then
-            outdata(i_snr, 3)[1] = -1d0
-            do i_encoding = 1, size(encConfig, 1)
-                call noisemapper_set_encoding_custom(nm, encConfig(i_encoding, :))
-                if (isHard) then
-                    call noisemapper_set_y_thresholds_uniform(nm) ! first guess
-                    opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
-                    opt_array(M_half)     = 1d0
-                    call lincoa(&
-                        calfun_gmi_hard_opt_threshold_s, opt_array, &
-                        f=I, &
-                        Aineq=A, bineq=b, &
-                        rhobeg=2*nm%sigma, rhoend=1d-6)
-                    I = -I
-                    call update_result
-                elseif (isReverse) then
-                    do i_config = 1, size(monoConfig)
-                        call noisemapper_set_monotonicity(nm, &
-                            config_int_to_bool(nm, monoConfig(i_config)))
-                        call noisemapper_set_y_thresholds_uniform(nm) ! first guess
-                        opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
-                        opt_array(M_half)     = 1d0
-                        call lincoa(&
-                            calfun_gmi_soft_opt_threshold_s, opt_array, &
-                            f=I, &
-                            Aineq=A, bineq=b, &
-                            rhobeg=2*nm%sigma, rhoend=1d-6)
-                        I = -I
-                        call update_result
-                    end do
-                else
-                    print *, "Not implemented"
-                    stop
+            i_encoding = encoding_index[1]
+        end if
+        if (.not. isHard) then
+            i_config = monoconf_index[1]
+        end if
+
+        ! Increment monoconf_index
+        if (isReverse .and. .not. isHard) then
+            monoconf_index[1] = mod(monoconf_index[1], size(monoConfig)) + 1
+        end if
+
+        ! Increment encoding_index
+        if (isGMI) then
+            if (isReverse .and. .not. isHard) then
+                if (monoconf_index[1] == 1) then
+                    encoding_index[1] = mod(encoding_index[1], size(encConfig, 1)) + 1
                 end if
-            end do
-        else
-            if (isHard) then
-                call noisemapper_set_y_thresholds_uniform(nm) ! set the initial guess
-                call lincoa(&
-                    calfun_mi_hard_opt_threshold, nm%y_thresholds(M_half+1:nm%M-1), &
-                    f=I, &
-                    Aineq=A, bineq=b, &
-                    rhobeg=2*nm%sigma, rhoend=1d-6)
-                I = -I
-                call update_result
-            elseif (isReverse) then
-                do i_config = 1, size(monoConfig)
-                    call noisemapper_set_monotonicity(nm, &
-                        config_int_to_bool(nm, monoConfig(i_config)))
-                    call noisemapper_set_y_thresholds_uniform(nm)
-                    opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
-                    call lincoa(&
-                        calfun_mi_soft_opt_threshold, opt_array(:M_half - 1), &
-                        f=I, &
-                        Aineq=A, bineq=b, &
-                        rhobeg=2*nm%sigma, rhoend=1d-6)
-                    I = -I
-                    call update_result
-                end do
-            else
-                print *, "Not Implemented"
-                stop
+            else ! isHard .or. .not. isReverse
+                encoding_index[1] = mod(encoding_index[1], size(encConfig, 1)) + 1
             end if
         end if
 
+        ! Increment snrdb_index
+        if (isGMI) then
+            if (encoding_index[1] == 1) then
+                if ( isReverse .and. .not. isHard ) then
+                    if (monoconf_index[1] == 1) then
+                        snrdb_index[1] = snrdb_index[1] + 1
+                    end if
+                else
+                    snrdb_index[1] = snrdb_index[1] + 1
+                end if
+            end if
+        else
+            if ( isReverse .and. .not. isHard ) then
+                if (monoconf_index[1] == 1) then
+                    snrdb_index[1] = snrdb_index[1] + 1
+                end if
+            else
+                snrdb_index[1] = snrdb_index[1] + 1
+            end if
+        end if
+
+        ! Update output
+        write(stdout, '(A)') achar(27)//'[?25h' ! Bring cursor back to beginning of line
+        write(stdout, '("SNR: ", I0, "/", I0, " ")', advance='no') i_snr, nsnr
+        if (isGMI) then
+            write(stdout, '("ENC: ", I0, "/", I0, " ")', advance='no') i_encoding, size(encConfig, 1)
+        end if
+        if (.not. isHard) then
+            write(stdout, '("CFG: ", I0, "/", I0, " ")', advance='no') i_config, size(monoConfig)
+        end if
+        unlock(lck[1])
+
+        if (isGMI) then
+            call noisemapper_set_encoding_custom(nm, encConfig(i_encoding, :))
+        end if
+        if (isReverse .and. .not. isHard) then
+            call noisemapper_set_monotonicity(nm, &
+                config_int_to_bool(nm, monoConfig(i_config)))
+        end if
+
+        ! Common setup
+        call noisemapper_update_N0_from_snrdb(nm, snr_array(i_snr))
+        call noisemapper_set_y_thresholds_uniform(nm) ! first guess
+        opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
+
+#define LINCOA_OPTIMIZE( FN, INIT_GUESS) \
+        call lincoa( \
+        FN, INIT_GUESS, \
+        f=I, \
+        Aineq=A, bineq=b, \
+        rhobeg=2*nm%sigma, rhoend=1d-6)
+
+        if (isGMI) then
+            opt_array(M_half) = 1d0
+            if (isHard) then
+                LINCOA_OPTIMIZE( calfun_gmi_hard_opt_threshold_s, opt_array )
+            elseif (isReverse) then
+                LINCOA_OPTIMIZE ( calfun_gmi_soft_opt_threshold_s, opt_array )
+            else
+                NOT_IMPLEMENTED()
+            end if
+        else
+            if (isHard) then
+                LINCOA_OPTIMIZE( calfun_mi_hard_opt_threshold, nm%y_thresholds(M_half+1:nm%M-1) )
+            elseif (isReverse) then
+                LINCOA_OPTIMIZE( calfun_mi_soft_opt_threshold, nm%y_thresholds(M_half+1:nm%M-1) )
+            else
+                NOT_IMPLEMENTED()
+            end if
+        end if
+        I = -I
+        call update_result
     end do loop_snr
 
     sync all
 
     if (me == 1) then
+        write(stdout, *) ""
         outdata(:, 2) = outdata(:, 1) - 10*log10(outdata(:,3))
         if (isGMI) then
             output_root = trim(output_root)//"/opt-gmi"
@@ -433,6 +477,7 @@ contains
         Limit = 100
         Lenw = 400
 
+        call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
         call noisemapper_set_Fy_grids(nm)
 
         call dqags(f_soft_reverse, 0d0, 1d0, 1d-12, 1d-6, &
