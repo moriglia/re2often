@@ -361,27 +361,20 @@ program mi_opt
         call noisemapper_set_y_thresholds_uniform(nm) ! first guess
         opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
 
-#define LINCOA_OPTIMIZE( FN, INIT_GUESS) \
-        call lincoa( \
-        FN, INIT_GUESS, \
-        f=I, \
-        Aineq=A, bineq=b, \
-        rhobeg=2*nm%sigma, rhoend=1d-6)
-
         if (isGMI) then
             opt_array(M_half) = 1d0
             if (isHard) then
-                LINCOA_OPTIMIZE( calfun_gmi_hard_opt_threshold_s, opt_array )
+                call lincoa_optimize_wrapper( calfun_gmi_hard_opt_threshold_s, opt_array )
             elseif (isReverse) then
-                LINCOA_OPTIMIZE ( calfun_gmi_soft_opt_threshold_s, opt_array )
+                call lincoa_optimize_wrapper( calfun_gmi_soft_opt_threshold_s, opt_array )
             else
                 NOT_IMPLEMENTED()
             end if
         else
             if (isHard) then
-                LINCOA_OPTIMIZE( calfun_mi_hard_opt_threshold, nm%y_thresholds(M_half+1:nm%M-1) )
+                call lincoa_optimize_wrapper( calfun_mi_hard_opt_threshold, nm%y_thresholds(M_half+1:nm%M-1) )
             elseif (isReverse) then
-                LINCOA_OPTIMIZE( calfun_mi_soft_opt_threshold, nm%y_thresholds(M_half+1:nm%M-1) )
+                call lincoa_optimize_wrapper( calfun_mi_soft_opt_threshold, nm%y_thresholds(M_half+1:nm%M-1) )
             else
                 NOT_IMPLEMENTED()
             end if
@@ -434,6 +427,23 @@ program mi_opt
 
 
 contains
+
+    subroutine lincoa_optimize_wrapper( objective_function, initial_guess )
+        interface
+            subroutine f(x, y)
+                double precision, intent(in) :: x(:)
+                double precision, intent(out) :: y
+            end subroutine f
+        end interface
+        procedure(f) :: objective_function
+        double precision, intent(inout) :: initial_guess(:)
+
+        call lincoa(&
+            objective_function, initial_guess, &
+            f=I, &
+            Aineq=A, bineq=b, &
+            rhobeg=2*nm%sigma, rhoend=1d-6)
+    end subroutine lincoa_optimize_wrapper
 
     subroutine calfun_mi_hard_opt_threshold(theta, I_neg)
         !! Compute \( I(X;\hat{X}) \) with uniform input probabilities
