@@ -227,8 +227,8 @@ program mi_opt
     o_s = o_p + nm%M
     o_e = o_s + 1
     o_c = o_e + nm%M
+    allocate(outdata(nsnr, o_c)[*])
     if (me==1) then
-        allocate(outdata(nsnr, o_c)[*])
         allocate(header(o_c))
 
         encoding_index = 1
@@ -251,8 +251,6 @@ program mi_opt
         header(o_e) = "B"
         call write_header(header(o_e), 0, nm%M-1, header(o_e:))
         header(o_c) = "C"
-    else
-        allocate(outdata(nsnr,1)[*])
     end if
 
     snr_array => outdata(:,1)
@@ -282,7 +280,7 @@ program mi_opt
         b => bineq(1:M_half-1)
     end if
 
-    sync all ! snr_done(:)[1] is read by all images
+    sync all
 
     loop_snr : do while (.true.)
         lock(lck[1])
@@ -338,7 +336,6 @@ program mi_opt
         end if
 
         ! Update output
-        write(stdout, '(A)') achar(27)//'[?25h' ! Bring cursor back to beginning of line
         write(stdout, '("SNR: ", I0, "/", I0, " ")', advance='no') i_snr, nsnr
         if (isGMI) then
             write(stdout, '("ENC: ", I0, "/", I0, " ")', advance='no') i_encoding, size(encConfig, 1)
@@ -346,6 +343,7 @@ program mi_opt
         if (.not. isHard) then
             write(stdout, '("CFG: ", I0, "/", I0, " ")', advance='no') i_config, size(monoConfig)
         end if
+        write(stdout, "(A)"), ""
         unlock(lck[1])
 
         if (isGMI) then
@@ -379,6 +377,8 @@ program mi_opt
                 NOT_IMPLEMENTED()
             end if
         end if
+
+        ! update result
         I = -I
         call update_result
     end do loop_snr
@@ -572,20 +572,22 @@ contains
 
 
     subroutine update_result
-        if (I .gt. outdata(i_snr, o_mi)[1]) then
-            outdata(i_snr, o_mi)[1] = I
-            if (isReverse) then
-                outdata(i_snr, o_th:o_p-1)[1] = nm%y_thresholds
-                outdata(i_snr, o_p:o_s-1)[1]  = nm%delta_Fy
-                if (.not. isHard) then
-                    outdata(i_snr, o_c)[1]    = monoConfig(i_config)
+        critical
+            if (I .gt. outdata(i_snr, o_mi)[1]) then
+                outdata(i_snr, o_mi)[1] = I
+                if (isReverse) then
+                    outdata(i_snr, o_th:o_p-1)[1] = nm%y_thresholds
+                    outdata(i_snr, o_p:o_s-1)[1]  = nm%delta_Fy
+                    if (.not. isHard) then
+                        outdata(i_snr, o_c)[1]    = monoConfig(i_config)
+                    end if
+                end if
+                if (isGMI) then
+                    outdata(i_snr, o_e:o_c-1)[1]  = encConfig(i_encoding, :)
+                    outdata(i_snr, o_s)[1]        = opt_array(M_half)
                 end if
             end if
-            if (isGMI) then
-                outdata(i_snr, o_e:o_c - 1)   = encConfig(i_encoding, :)
-                outdata(i_snr, o_s)           = opt_array(M_half)
-            end if
-        end if
+        end critical
     end subroutine update_result
 
 end program mi_opt
