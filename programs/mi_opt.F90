@@ -323,7 +323,7 @@ program mi_opt
         end do
 
         if (isGMI) then
-            write(format_log, '(A)') trim(format_log)//', x4 , E12.3E3'
+            write(format_log, '(A)') trim(format_log)//', x4 E12.3E3'
             write(format_csv, '(A)') trim(format_csv)//', ",", E12.3E3'
             write(format_log, '(A, i0, A)') trim(format_log)//', ', nm%M, '(x4  i0)'
             write(format_csv, '(A, i0, A)') trim(format_csv)//', ', nm%M, '(",", i0)'
