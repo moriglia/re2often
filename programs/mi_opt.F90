@@ -491,14 +491,14 @@ contains
         call noisemapper_set_Fy_grids(nm)
 
         call dqags(f_soft_reverse, 0d0, 1d0, 1d-12, 1d-6, &
-            I, Abserr, Neval, Ier, &
+            I_neg, Abserr, Neval, Ier, &
             Limit, Lenw, Last, Iwork, Work)
 
         if (Ier /= 0) then
             print '("Error at ", f10.3, " [dB]: error ", i1)', snr_array(i_snr), Ier
         end if
 
-        I = - I - H_Xhat(nm)
+        I_neg = - I_neg - H_Xhat(nm)
     end subroutine calfun_mi_soft_opt_threshold
 
 
