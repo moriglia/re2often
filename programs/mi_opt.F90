@@ -21,7 +21,8 @@ program mi_opt
     use iso_fortran_env, only: &
         lock_type, &
         dp => real64, &
-        stdout => output_unit
+        stdout => output_unit, &
+        event_type
     use io_fortran_lib, only: from_file, to_file
     use re2often_noisemapper
     use re2often_utils, only: save_data, make_directory_and_file_name
@@ -42,7 +43,7 @@ program mi_opt
     character(250) :: output_dir
     character(250) :: output_name
     character(20), allocatable   :: header(:)
-    integer        :: io
+    integer        :: io_log, io_csv
     double precision :: snr(2)         ! Signal to Noise Ratio in dB
     integer :: nsnr           ! Number of SNR points
     integer :: bps            ! Bits per symbol
@@ -81,6 +82,11 @@ program mi_opt
     integer            :: o_s  ! = o_p + nm%M
     integer            :: o_e
     integer            :: o_c
+    type(event_type), allocatable :: snr_done(:)[:]
+    integer            :: until_count
+    character(500)     :: format_csv
+    character(500)     :: format_log
+    character(50)      :: tmpstr
 
     double precision, pointer :: snr_array(:)
 
@@ -228,6 +234,7 @@ program mi_opt
     o_e = o_s + 1
     o_c = o_e + nm%M
     allocate(outdata(nsnr, o_c)[*])
+    allocate(snr_done(nsnr)[*])
     if (me==1) then
         allocate(header(o_c))
 
@@ -241,7 +248,7 @@ program mi_opt
 
 
         header(1) = trim("SNR")
-        header(2) = trim("scSNR")
+        header(2) = trim("E_b/N_0")
         header(3) = trim("I")
         header(o_th) = "\theta"
         call write_header(header(o_th), 1, nm%M-1, header(o_th:))
@@ -280,7 +287,92 @@ program mi_opt
         b => bineq(1:M_half-1)
     end if
 
+    if (me == 1) then
+        if (isGMI) then
+            output_root = trim(output_root)//"/opt-gmi"
+        else
+            output_root = trim(output_root)//"/opt-mi"
+        end if
+
+        call make_directory_and_file_name(output_root, bps, isReverse, isHard, &
+            snr, nsnr, 0, 0, 0, 0, output_dir, output_name)
+        call execute_command_line("mkdir -p " // trim(output_dir))
+
+        open(newunit=io_log, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
+            status="replace", action="write")
+        open(newunit=io_csv, file=trim(output_dir) // "/" // trim(output_name) // ".csv", &
+            status="replace", action="write")
+
+        format_log = '(f12.8, x4 f12.9, x4 E12.3E3,'
+        format_csv = '(f0, ",", f0, ",", f0,'
+        write(io_log, '(A12, x4 A12, x4 A12)', advance='no') trim(header(1)), trim(header(2)), trim(header(3))
+        write(io_csv, '(A, ",", A, ",", A)', advance='no') trim(header(1)), trim(header(2)), trim(header(3))
+
+        write(format_log, '(A, " ", i0, "(x4 f12.8), ", i0, "(x4 f12.8)" )') trim(format_log), nm%M-1, nm%M
+        write(format_csv, '(A, " ", i0, A, i0, A )') &
+            trim(format_csv), nm%M-1, '(",", f12.8), ', nm%M, '(",", f12.8)'
+        do ii = 1, nm%M-1
+            write(tmpstr, '("\theta_", i0)') ii
+            write(io_log, '(x4 A12)', advance='no') trim(tmpstr)
+            write(io_csv, '(",", A)', advance='no') trim(tmpstr)
+        end do
+        do ii = 1, nm%M
+            write(tmpstr, '("P_", i0)') ii
+            write(io_log, '(x4 A12)', advance='no') trim(tmpstr)
+            write(io_csv, '(",", A)', advance='no') trim(tmpstr)
+        end do
+
+        if (isGMI) then
+            write(format_log, '(A)') trim(format_log)//', x4 , E12.3E3'
+            write(format_csv, '(A)') trim(format_csv)//', ",", E12.3E3'
+            write(format_log, '(A, i0, A)') trim(format_log)//', ', nm%M, '(x4  i0)'
+            write(format_csv, '(A, i0, A)') trim(format_csv)//', ', nm%M, '(",", i0)'
+
+            write(io_log, '(x4 A12)', advance='no') "s"
+            write(io_csv, '(",", A)' , advance='no') "s"
+            do ii = 0, nm%M-1
+                write(tmpstr, '("B_", i0)') ii
+                write(io_log, '(x4 A12)', advance='no') trim(tmpstr)
+                write(io_csv, '(",", A)'  , advance='no')  trim(tmpstr)
+            end do
+        end if
+        if (isReverse .and. .not. isHard) then
+            write(format_log, '(A)') trim(format_log)//', x4 i0'
+            write(format_csv, '(A)') trim(format_csv)//', ",", i0'
+
+            write(io_log, '(x4 A12)', advance='no') "C"
+            write(io_csv, '(",",  A)', advance='no') "C"
+        end if
+        write(format_log, '(A)') trim(format_log)//')'
+        write(format_csv, '(A)') trim(format_csv)//')'
+        write(io_log, '(A)') ""
+        write(io_csv, '(A)') ""
+        print *, trim(format_csv)
+        print *, trim(format_log)
+
+        flush(io_log)
+        flush(io_csv)
+
+        if ( isGMI ) then
+            until_count = size(encConfig, 1)
+        else
+            until_count = 1
+        end if
+        if ( isReverse .and. .not. isHard ) then
+            until_count = until_count * size(monoConfig)
+        end if
+    end if
+
     sync all
+
+
+    if ((me==1) .and. (n_im > 1)) then
+        do i_snr = 1, nsnr
+            event wait( snr_done(i_snr), until_count=until_count )
+            call write_result_to_file(i_snr)
+        end do
+        goto 100 ! The end :D
+    end if
 
     loop_snr : do while (.true.)
         lock(lck[1])
@@ -381,49 +473,59 @@ program mi_opt
         ! update result
         I = -I
         call update_result
+        event post(snr_done(i_snr)[1])
+
+        if (me==1 .and. n_im==1) then
+            ! Query anyways so that we don't have to go throught all branches
+            ! to know whether we completed the computation of the current SNR
+            call event_query(snr_done(i_snr), ii)
+            if (ii == until_count) then
+                call write_result_to_file(i_snr)
+            end if
+        end if
     end do loop_snr
 
-    sync all
+100 sync all
 
-    if (me == 1) then
-        write(stdout, *) ""
-        outdata(:, 2) = outdata(:, 1) - 10*log10(outdata(:,3))
-        if (isGMI) then
-            output_root = trim(output_root)//"/opt-gmi"
-        else
-            output_root = trim(output_root)//"/opt-mi"
-        end if
+    ! if (me == 1) then
+    !     write(stdout, *) ""
+    !     outdata(:, 2) = outdata(:, 1) - 10*log10(outdata(:,3))
+    !     if (isGMI) then
+    !         output_root = trim(output_root)//"/opt-gmi"
+    !     else
+    !         output_root = trim(output_root)//"/opt-mi"
+    !     end if
 
-        call make_directory_and_file_name(output_root, bps, isReverse, isHard, &
-            snr, nsnr, 0, 0, 0, 0, output_dir, output_name)
-        call execute_command_line("mkdir -p " // trim(output_dir))
+    !     call make_directory_and_file_name(output_root, bps, isReverse, isHard, &
+    !         snr, nsnr, 0, 0, 0, 0, output_dir, output_name)
+    !     call execute_command_line("mkdir -p " // trim(output_dir))
 
-        open(newunit=io, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
-            status="replace", action="write")
+    !     ! open(newunit=io, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
+    !     !     status="replace", action="write")
 
-        ! write(io, '(A, T16, A, T32, A, T48)') &
-        !     "SNR [dB]", "Eb/N0 [dB]", "I"
-        ! do i_snr = 1, nsnr
-        !     write(io, '(f12.8, T16, f12.9, T32, E12.3E3)', advance='no') &
-        !         outdata(i_snr, :3)
-        !     do ii = 1, nm%M-1
-        !         write(io, '(8X, E12.3E3)', advance='no') outdata(i_snr, o_mi+ii)
-        !     end do
-        !     if (isGMI) then
-        !         write(io, '(8X, E12.3E3)') outdata(i_snr, o_s)
-        !     else
-        !         write(io, '(A)') "" ! Just add a newline
-        !     end if
-        ! end do
-        write(io, *) header
-        do i_snr = 1, nsnr
-            write(io, *) outdata(i_snr, :)
-        end do
-        close(io)
+    !     ! ! write(io, '(A, T16, A, T32, A, T48)') &
+    !     ! !     "SNR [dB]", "Eb/N0 [dB]", "I"
+    !     ! ! do i_snr = 1, nsnr
+    !     ! !     write(io, '(f12.8, T16, f12.9, T32, E12.3E3)', advance='no') &
+    !     ! !         outdata(i_snr, :3)
+    !     ! !     do ii = 1, nm%M-1
+    !     ! !         write(io, '(8X, E12.3E3)', advance='no') outdata(i_snr, o_mi+ii)
+    !     ! !     end do
+    !     ! !     if (isGMI) then
+    !     ! !         write(io, '(8X, E12.3E3)') outdata(i_snr, o_s)
+    !     ! !     else
+    !     ! !         write(io, '(A)') "" ! Just add a newline
+    !     ! !     end if
+    !     ! ! end do
+    !     ! write(io, *) header
+    !     ! do i_snr = 1, nsnr
+    !     !     write(io, *) outdata(i_snr, :)
+    !     ! end do
+    !     ! close(io)
 
-        call to_file(x=outdata, file=trim(output_dir)//"/"//trim(output_name)//".csv", &
-            header=header, fmt="e")
-    end if
+    !     ! call to_file(x=outdata, file=trim(output_dir)//"/"//trim(output_name)//".csv", &
+    !     !     header=header, fmt="e")
+    ! end if
 
 
 contains
@@ -589,5 +691,39 @@ contains
             end if
         end critical
     end subroutine update_result
+
+
+    subroutine write_result_to_file(snr_i)
+        integer, intent(in) :: snr_i
+
+        outdata(snr_i, 2) = outdata(snr_i, 1) - 10*log10(outdata(snr_i, 3))
+        if (isGMI) then
+            if (isReverse) then
+                if (isHard) then
+                    write(io_log, format_log) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
+                    write(io_csv, format_csv) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
+                else
+                    write(io_log, format_log) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
+                    write(io_csv, format_csv) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
+                end if
+            else
+                NOT_IMPLEMENTED()
+            end if
+        else
+            if (isReverse) then
+                if (isHard) then
+                    write(io_log, format_log) outdata(snr_i, :o_s-1)
+                    write(io_csv, format_csv) outdata(snr_i, :o_s-1)
+                else
+                    write(io_log, format_log) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
+                    write(io_csv, format_csv) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
+                end if
+            else
+                NOT_IMPLEMENTED()
+            end if
+        end if
+        flush(io_log)
+        flush(io_csv)
+    end subroutine write_result_to_file
 
 end program mi_opt
