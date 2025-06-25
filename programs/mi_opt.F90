@@ -303,44 +303,44 @@ program mi_opt
         open(newunit=io_csv, file=trim(output_dir) // "/" // trim(output_name) // ".csv", &
             status="replace", action="write")
 
-        format_log = '(f12.8, x4 f12.9, x4 E12.3E3,'
-        format_csv = '(f0, ",", f0, ",", f0,'
-        write(io_log, '(A12, x4 A12, x4 A12)', advance='no') trim(header(1)), trim(header(2)), trim(header(3))
+        format_log = '(f12.8, 4x, f12.9, 4x, E12,'
+        format_csv = '(f0, ",", f0, ",", E,'
+        write(io_log, '(A12, 4x, A12, 4x, A12)', advance='no') trim(header(1)), trim(header(2)), trim(header(3))
         write(io_csv, '(A, ",", A, ",", A)', advance='no') trim(header(1)), trim(header(2)), trim(header(3))
 
-        write(format_log, '(A, " ", i0, "(x4 f12.8), ", i0, "(x4 f12.8)" )') trim(format_log), nm%M-1, nm%M
+        write(format_log, '(A, " ", i0, "(4x, f12.8), ", i0, "(4x, f12.8)" )') trim(format_log), nm%M-1, nm%M
         write(format_csv, '(A, " ", i0, A, i0, A )') &
-            trim(format_csv), nm%M-1, '(",", f12.8), ', nm%M, '(",", f12.8)'
+            trim(format_csv), nm%M-1, '(",", f), ', nm%M, '(",", f)'
         do ii = 1, nm%M-1
             write(tmpstr, '("\theta_", i0)') ii
-            write(io_log, '(x4 A12)', advance='no') trim(tmpstr)
+            write(io_log, '(4x, A12)', advance='no') trim(tmpstr)
             write(io_csv, '(",", A)', advance='no') trim(tmpstr)
         end do
         do ii = 1, nm%M
             write(tmpstr, '("P_", i0)') ii
-            write(io_log, '(x4 A12)', advance='no') trim(tmpstr)
+            write(io_log, '(4x, A12)', advance='no') trim(tmpstr)
             write(io_csv, '(",", A)', advance='no') trim(tmpstr)
         end do
 
         if (isGMI) then
-            write(format_log, '(A)') trim(format_log)//', x4 E12.3E3'
-            write(format_csv, '(A)') trim(format_csv)//', ",", E12.3E3'
-            write(format_log, '(A, i0, A)') trim(format_log)//', ', nm%M, '(x4  i0)'
+            write(format_log, '(A)') trim(format_log)//', 4x, E12'
+            write(format_csv, '(A)') trim(format_csv)//', ",", E'
+            write(format_log, '(A, i0, A)') trim(format_log)//', ', nm%M, '(4x,  i0)'
             write(format_csv, '(A, i0, A)') trim(format_csv)//', ', nm%M, '(",", i0)'
 
-            write(io_log, '(x4 A12)', advance='no') "s"
+            write(io_log, '(4x, A12)', advance='no') "s"
             write(io_csv, '(",", A)' , advance='no') "s"
             do ii = 0, nm%M-1
                 write(tmpstr, '("B_", i0)') ii
-                write(io_log, '(x4 A12)', advance='no') trim(tmpstr)
+                write(io_log, '(4x, A12)', advance='no') trim(tmpstr)
                 write(io_csv, '(",", A)'  , advance='no')  trim(tmpstr)
             end do
         end if
         if (isReverse .and. .not. isHard) then
-            write(format_log, '(A)') trim(format_log)//', x4 i0'
+            write(format_log, '(A)') trim(format_log)//', 4x, i0'
             write(format_csv, '(A)') trim(format_csv)//', ",", i0'
 
-            write(io_log, '(x4 A12)', advance='no') "C"
+            write(io_log, '(4x, A12)', advance='no') "C"
             write(io_csv, '(",",  A)', advance='no') "C"
         end if
         write(format_log, '(A)') trim(format_log)//')'
