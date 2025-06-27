@@ -39,7 +39,7 @@
      (method git-fetch)
      (uri (git-reference
            (url "https://github.com/fortran-lang/fpm.git")
-           (commit version)))
+           (commit (string-append "v" version))))
      (sha256
       (base32
        "1lvmf8w3wfqyvv1r4jsslq58j2b35gfffyz605vfsapkcr8jzwc0"))))
