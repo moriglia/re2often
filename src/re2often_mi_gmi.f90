@@ -399,7 +399,7 @@ contains
                 I_aux, Abserr, Neval, Ier, &
                 Limit, Lenw, Last, Iwork, Work)
             if (Ier /= 0) then
-                print '("DQAGS error in f_N_GH_map_expectation_log_qs ", i1)', Ier
+                print '("DQAGS error in f_N_GH_map_expectation_qs ", i1)', Ier
             end if
             I_s  = I_s - nm%probabilities(xhat) * log0(I_aux)
         end do
