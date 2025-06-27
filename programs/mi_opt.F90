@@ -13,6 +13,9 @@
 
 !    You should have received a copy of the GNU General Public License
 !    along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+#define IWORK_SIZE 500
+
 program mi_opt
     !! author: Marco Origlia
     !! license: GPL-3.0-or-later
@@ -68,6 +71,7 @@ program mi_opt
     double precision, pointer :: A(:,:)
     double precision, pointer :: b(:)
     double precision :: I ! the mutual information !
+    double precision :: aux_gmi_s
 
     ! +-------------+
     ! | Output data |
@@ -276,16 +280,11 @@ program mi_opt
         ! Which is decoupled from the other equations
         Aineq(ii, ii-1) = 1d0
     end do
-    bineq(:) = -1d-2
+    bineq(:) = -1d-3
 
-    if (isGMI) then
-        A => Aineq
-        b => bineq
-    else
-        ! Exclude the s parameter from the optimization
-        A => Aineq(1:M_half-1, 1:M_half-1)
-        b => bineq(1:M_half-1)
-    end if
+    ! Exclude the s parameter from the optimization, as it is done separately
+    A => Aineq(1:M_half-1, 1:M_half-1)
+    b => bineq(1:M_half-1)
 
     if (me == 1) then
         if (isGMI) then
@@ -303,14 +302,14 @@ program mi_opt
         open(newunit=io_csv, file=trim(output_dir) // "/" // trim(output_name) // ".csv", &
             status="replace", action="write")
 
-        format_log = '(f12.8, 4x, f12.9, 4x, E12,'
-        format_csv = '(f0, ",", f0, ",", E,'
+        format_log = '(f12.3, 4x, f12.3, 4x, E12.3e2,'
+        format_csv = '(E0.0, ",", E0.0, ",", E0.0,'
         write(io_log, '(A12, 4x, A12, 4x, A12)', advance='no') trim(header(1)), trim(header(2)), trim(header(3))
         write(io_csv, '(A, ",", A, ",", A)', advance='no') trim(header(1)), trim(header(2)), trim(header(3))
 
         write(format_log, '(A, " ", i0, "(4x, f12.8), ", i0, "(4x, f12.8)" )') trim(format_log), nm%M-1, nm%M
         write(format_csv, '(A, " ", i0, A, i0, A )') &
-            trim(format_csv), nm%M-1, '(",", f), ', nm%M, '(",", f)'
+            trim(format_csv), nm%M-1, '(",", f8.3), ', nm%M, '(",", E0.0)'
         do ii = 1, nm%M-1
             write(tmpstr, '("\theta_", i0)') ii
             write(io_log, '(4x, A12)', advance='no') trim(tmpstr)
@@ -323,9 +322,9 @@ program mi_opt
         end do
 
         if (isGMI) then
-            write(format_log, '(A)') trim(format_log)//', 4x, E12'
-            write(format_csv, '(A)') trim(format_csv)//', ",", E'
-            write(format_log, '(A, i0, A)') trim(format_log)//', ', nm%M, '(4x,  i0)'
+            write(format_log, '(A)') trim(format_log)//', 4x, D12.3'
+            write(format_csv, '(A)') trim(format_csv)//', ",", D'
+            write(format_log, '(A, i0, A)') trim(format_log)//', ', nm%M, '(4x,  i12)'
             write(format_csv, '(A, i0, A)') trim(format_csv)//', ', nm%M, '(",", i0)'
 
             write(io_log, '(4x, A12)', advance='no') "s"
@@ -337,7 +336,7 @@ program mi_opt
             end do
         end if
         if (isReverse .and. .not. isHard) then
-            write(format_log, '(A)') trim(format_log)//', 4x, i0'
+            write(format_log, '(A)') trim(format_log)//', 4x, i12'
             write(format_csv, '(A)') trim(format_csv)//', ",", i0'
 
             write(io_log, '(4x, A12)', advance='no') "C"
@@ -454,17 +453,32 @@ program mi_opt
         if (isGMI) then
             opt_array(M_half) = 1d0
             if (isHard) then
-                call lincoa_optimize_wrapper( calfun_gmi_hard_opt_threshold_s, opt_array )
+                call lincoa( calfun_gmi_hard_opt_s, opt_array(M_half:M_half), &
+                    f=I, ftarget=real(-nm%bps, 8), &
+                    Aineq=Aineq(M_half:M_half, M_half:M_half), bineq=bineq(M_half:M_half), &
+                    rhobeg=0.1d0, rhoend=1d-6)
+                ! Final optimization round 
+                aux_gmi_s = opt_array(M_half)
+                call noisemapper_set_y_thresholds_uniform(nm) ! first guess
+                opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
+                call lincoa_optimize_wrapper(calfun_gmi_hard_opt_threshold, opt_array(1:M_half-1))
             elseif (isReverse) then
-                call lincoa_optimize_wrapper( calfun_gmi_soft_opt_threshold_s, opt_array )
+                call lincoa( calfun_gmi_soft_opt_s, opt_array(M_half:M_half), &
+                    f=I, ftarget=real(-nm%bps, 8), &
+                    Aineq=Aineq(M_half:M_half, M_half:M_half), bineq=bineq(M_half:M_half), &
+                    rhobeg=0.1d0, rhoend=1d-6)
+                aux_gmi_s = opt_array(M_half)
+                call noisemapper_set_y_thresholds_uniform(nm) ! first guess
+                opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
+                call lincoa_optimize_wrapper(calfun_gmi_soft_opt_threshold, opt_array(1:M_half-1))
             else
                 NOT_IMPLEMENTED()
             end if
         else
             if (isHard) then
-                call lincoa_optimize_wrapper( calfun_mi_hard_opt_threshold, nm%y_thresholds(M_half+1:nm%M-1) )
+                call lincoa_optimize_wrapper( calfun_mi_hard_opt_threshold, opt_array(1:M_half-1))
             elseif (isReverse) then
-                call lincoa_optimize_wrapper( calfun_mi_soft_opt_threshold, nm%y_thresholds(M_half+1:nm%M-1) )
+                call lincoa_optimize_wrapper( calfun_mi_soft_opt_threshold, opt_array(1:M_half-1))
             else
                 NOT_IMPLEMENTED()
             end if
@@ -487,47 +501,6 @@ program mi_opt
 
 100 sync all
 
-    ! if (me == 1) then
-    !     write(stdout, *) ""
-    !     outdata(:, 2) = outdata(:, 1) - 10*log10(outdata(:,3))
-    !     if (isGMI) then
-    !         output_root = trim(output_root)//"/opt-gmi"
-    !     else
-    !         output_root = trim(output_root)//"/opt-mi"
-    !     end if
-
-    !     call make_directory_and_file_name(output_root, bps, isReverse, isHard, &
-    !         snr, nsnr, 0, 0, 0, 0, output_dir, output_name)
-    !     call execute_command_line("mkdir -p " // trim(output_dir))
-
-    !     ! open(newunit=io, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
-    !     !     status="replace", action="write")
-
-    !     ! ! write(io, '(A, T16, A, T32, A, T48)') &
-    !     ! !     "SNR [dB]", "Eb/N0 [dB]", "I"
-    !     ! ! do i_snr = 1, nsnr
-    !     ! !     write(io, '(f12.8, T16, f12.9, T32, E12.3E3)', advance='no') &
-    !     ! !         outdata(i_snr, :3)
-    !     ! !     do ii = 1, nm%M-1
-    !     ! !         write(io, '(8X, E12.3E3)', advance='no') outdata(i_snr, o_mi+ii)
-    !     ! !     end do
-    !     ! !     if (isGMI) then
-    !     ! !         write(io, '(8X, E12.3E3)') outdata(i_snr, o_s)
-    !     ! !     else
-    !     ! !         write(io, '(A)') "" ! Just add a newline
-    !     ! !     end if
-    !     ! ! end do
-    !     ! write(io, *) header
-    !     ! do i_snr = 1, nsnr
-    !     !     write(io, *) outdata(i_snr, :)
-    !     ! end do
-    !     ! close(io)
-
-    !     ! call to_file(x=outdata, file=trim(output_dir)//"/"//trim(output_name)//".csv", &
-    !     !     header=header, fmt="e")
-    ! end if
-
-
 contains
 
     subroutine lincoa_optimize_wrapper( objective_function, initial_guess )
@@ -544,7 +517,7 @@ contains
             objective_function, initial_guess, &
             f=I, &
             Aineq=A, bineq=b, &
-            rhobeg=2*nm%sigma, rhoend=1d-6)
+            rhobeg=(M_half-1)*nm%sigma, rhoend=1d-6, ftarget=real(-nm%bps, 8))
     end subroutine lincoa_optimize_wrapper
 
     subroutine calfun_mi_hard_opt_threshold(theta, I_neg)
@@ -584,10 +557,10 @@ contains
         real(c_double) :: Abserr
         integer :: Neval, Ier, Limit, Lenw, Last
 
-        integer :: Iwork(100)
-        real(c_double) :: Work(400)
-        Limit = 100
-        Lenw = 400
+        integer :: Iwork(IWORK_SIZE)
+        real(c_double) :: Work(4*IWORK_SIZE)
+        Limit = IWORK_SIZE
+        Lenw = 4*Limit
 
         call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
         call noisemapper_set_Fy_grids(nm)
@@ -603,7 +576,9 @@ contains
         I_neg = - I_neg - H_Xhat(nm)
     end subroutine calfun_mi_soft_opt_threshold
 
-
+    ! +-------------------------------------------------+
+    ! | GMI with joint optimization of thresholds and S |
+    ! +-------------------------------------------------+
 
     subroutine calfun_gmi_hard_opt_threshold_s(th_s, I_neg)
         !! Compute \( I_s(X;\hat{\mathbf{B}}) \) with uniform input probabilities
@@ -643,6 +618,65 @@ contains
         end associate
     end subroutine calfun_gmi_soft_opt_threshold_s
 
+    ! +-------------------------------------------------+
+    ! | Split and nest optimization of thresholds and S |
+    ! +-------------------------------------------------+
+    subroutine calfun_gmi_hard_opt_threshold(theta, I_neg)
+        double precision, intent(in) :: theta(:)
+        double precision, intent(out) :: I_neg
+
+        call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
+        call noisemapper_update_hard_reverse_tables(nm, .true.)
+
+        I_neg = - I_s_map_hard_reverse(q_map_hard_product, s=aux_gmi_s)
+    end subroutine calfun_gmi_hard_opt_threshold
+
+
+    subroutine calfun_gmi_hard_opt_s(s, I_neg)
+        double precision, intent(in) :: s(:)
+        double precision, intent(out) :: I_neg
+
+        aux_gmi_s = s(1)
+        call noisemapper_set_y_thresholds_uniform(nm)
+        ! call noisemapper_update_hard_reverse_tables(nm, .true.)
+        opt_array(1:M_half-1) = nm%y_thresholds(M_half+1:nm%M-1)
+
+        call lincoa(calfun_gmi_hard_opt_threshold, opt_array(1:M_half-1), &
+            f=I_neg, ftarget=real(-nm%bps, 8), &
+            rhobeg=nm%sigma*(M_half-1), rhoend=1d-3, &
+            Aineq=Aineq(1:M_half-1,1:M_half-1), bineq=bineq(1:M_half-1))
+    end subroutine calfun_gmi_hard_opt_s
+
+
+    subroutine calfun_gmi_soft_opt_threshold(theta, I_neg)
+        double precision, intent(in) :: theta(:)
+        double precision, intent(out) :: I_neg
+
+        call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:)])
+        call noisemapper_set_Fy_grids(nm)
+
+        I_neg = - I_s_map_soft_reverse(q_map_soft_reverse_prod, s=aux_gmi_s)
+    end subroutine calfun_gmi_soft_opt_threshold
+
+
+    subroutine calfun_gmi_soft_opt_s(s, I_neg)
+        double precision, intent(in) :: s(:)
+        double precision, intent(out) :: I_neg
+
+        aux_gmi_s = s(1)
+        call noisemapper_set_y_thresholds_uniform(nm)
+        ! call noisemapper_set_Fy_grids(nm)
+        opt_array(1:M_half-1) = nm%y_thresholds(M_half+1:nm%M-1)
+
+        call lincoa(calfun_gmi_soft_opt_threshold, opt_array(1:M_half-1), &
+            f=I_neg, ftarget=real(-nm%bps, 8), &
+            rhobeg=nm%sigma*(M_half-1), rhoend=1d-3, &
+            Aineq=Aineq(1:M_half-1,1:M_half-1), bineq=bineq(1:M_half-1))
+    end subroutine calfun_gmi_soft_opt_s
+
+    ! +------------------+
+    ! | Helper functions |
+    ! +------------------+
 
     function config_int_to_bool(nm, c) result(b)
         type(noisemapper_type), intent(in) :: nm
@@ -677,6 +711,7 @@ contains
         critical
             if (I .gt. outdata(i_snr, o_mi)[1]) then
                 outdata(i_snr, o_mi)[1] = I
+                call noisemapper_set_y_thresholds(nm, [-opt_array(M_half-1:1:-1), 0d0, opt_array(:M_half-1)])
                 if (isReverse) then
                     outdata(i_snr, o_th:o_p-1)[1] = nm%y_thresholds
                     outdata(i_snr, o_p:o_s-1)[1]  = nm%delta_Fy
@@ -700,11 +735,11 @@ contains
         if (isGMI) then
             if (isReverse) then
                 if (isHard) then
-                    write(io_log, format_log) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
-                    write(io_csv, format_csv) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
+                    write(io_log, trim(format_log)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
+                    write(io_csv, trim(format_csv)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
                 else
-                    write(io_log, format_log) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
-                    write(io_csv, format_csv) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
+                    write(io_log, trim(format_log)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
+                    write(io_csv, trim(format_csv)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
                 end if
             else
                 NOT_IMPLEMENTED()
@@ -712,11 +747,11 @@ contains
         else
             if (isReverse) then
                 if (isHard) then
-                    write(io_log, format_log) outdata(snr_i, :o_s-1)
-                    write(io_csv, format_csv) outdata(snr_i, :o_s-1)
+                    write(io_log, trim(format_log)) outdata(snr_i, :o_s-1)
+                    write(io_csv, trim(format_csv)) outdata(snr_i, :o_s-1)
                 else
-                    write(io_log, format_log) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
-                    write(io_csv, format_csv) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
+                    write(io_log, trim(format_log)) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
+                    write(io_csv, trim(format_csv)) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
                 end if
             else
                 NOT_IMPLEMENTED()
