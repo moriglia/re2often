@@ -331,6 +331,8 @@ contains
 
 
     function f_N_GH_map_expectation_log_qs(n) result(f)
+        !! @warning the exponent "s" is not appied:
+        !! you will need to multiply the result of this function by "s"
         real(c_double), intent(in) :: n
         real(c_double)             :: f
 
@@ -342,7 +344,7 @@ contains
             tmp = 0
             do xhat = 0, nm%M-1
                 tmp = tmp + f_n_xhat_cond_x(n, xhat, x) &
-                    * log0(qfun_map_reverse_soft(x, xhat, n)**gmi_s)
+                    * log0(qfun_map_reverse_soft(x, xhat, n))
             end do
             f = f + nm%probabilities(x) * tmp
         end do

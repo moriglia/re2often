@@ -466,7 +466,7 @@ program mi_opt
                 call lincoa( calfun_gmi_soft_opt_s, opt_array(M_half:M_half), &
                     f=I, ftarget=real(-nm%bps, 8), &
                     Aineq=Aineq(M_half:M_half, M_half:M_half), bineq=bineq(M_half:M_half), &
-                    rhobeg=0.1d0, rhoend=1d-6)
+                    rhobeg=1d0, rhoend=1d-6)
                 aux_gmi_s = opt_array(M_half)
                 call noisemapper_set_y_thresholds_uniform(nm) ! first guess
                 opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
@@ -652,7 +652,7 @@ contains
         double precision, intent(in) :: theta(:)
         double precision, intent(out) :: I_neg
 
-        call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:)])
+        call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
         call noisemapper_set_Fy_grids(nm)
 
         I_neg = - I_s_map_soft_reverse(q_map_soft_reverse_prod, s=aux_gmi_s)
