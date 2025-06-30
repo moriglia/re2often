@@ -403,7 +403,7 @@ contains
             if (Ier /= 0) then
                 print '("DQAGS error in f_N_GH_map_expectation_qs ", i1)', Ier
             end if
-            I_s  = I_s - nm%probabilities(xhat) * log0(I_aux)
+            I_s  = I_s - nm%delta_Fy(xhat) * log0(I_aux)
         end do
         I_s = I_s / log(2d0)
     end function I_s_map_soft_reverse
