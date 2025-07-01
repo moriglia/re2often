@@ -360,16 +360,17 @@ contains
 
         ! Data for DQAGS
         real(c_double) :: Abserr
-        integer :: Neval, Ier, Limit, Lenw, Last
-        integer :: Iwork(100)
-        real(c_double) :: Work(400)
+        integer :: Neval, Ier, Lenw, Last
+        integer, allocatable :: Iwork(:)
+        real(c_double), allocatable :: Work(:)
 
         ! Further auxiliaries
         real(c_double) :: I_aux
         integer :: xhat
 
-        Limit = 100
-        Lenw = 400
+        allocate(Iwork(dqags_Limit))
+        Lenw = 4*dqags_Limit
+        allocate(Work(Lenw))
 
         if (present(s)) then
             gmi_s = s
@@ -387,7 +388,7 @@ contains
 
         call dqags(f_N_GH_map_expectation_log_qs, 0d0, 1d0, 1d-12, 1d-6, &
             I_s, Abserr, Neval, Ier, &
-            Limit, Lenw, Last, Iwork, Work)
+            dqags_Limit, Lenw, Last, Iwork, Work)
 
         if (Ier /= 0) then
             print '("DQAGS error in f_N_GH_map_expectation_log_qs ", i1)', Ier
@@ -399,7 +400,7 @@ contains
             gmi_xtilde = xhat
             call dqags(f_N_GH_map_expectation_qs, 0d0, 1d0, 1d-12, 1d-6, &
                 I_aux, Abserr, Neval, Ier, &
-                Limit, Lenw, Last, Iwork, Work)
+                dqags_Limit, Lenw, Last, Iwork, Work)
             if (Ier /= 0) then
                 print '("DQAGS error in f_N_GH_map_expectation_qs ", i1)', Ier
             end if

@@ -182,8 +182,9 @@ module re2often_mi
 
     real(c_double), parameter :: sqrtPi = sqrt(acos(-1d0))
     real(c_double) :: sqrtN0
+    integer :: dqags_Limit = 100
 
-    public :: sqrtN0
+    public :: sqrtN0, dqags_Limit
     public :: I_s_map_hard_reverse, I_s_map_soft_direct
     public :: q_map_hard_product, q_map_hard_opt
     public :: q_map_soft_direct_prod
@@ -193,6 +194,7 @@ module re2often_mi
 
     public :: I_s_map_soft_reverse
     public :: q_map_soft_reverse_prod
+    
 contains
 
     real(c_double) elemental function log0(arg, base) result(l)

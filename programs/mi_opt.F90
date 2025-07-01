@@ -368,10 +368,14 @@ program mi_opt
     if ((me==1) .and. (n_im > 1)) then
         do i_snr = 1, nsnr
             event wait( snr_done(i_snr), until_count=until_count )
+            print *, "Woke up for saving data", i_snr
             call write_result_to_file(i_snr)
+            print *, "!Saved!"
         end do
         goto 100 ! The end :D
-    end if
+     end if
+
+     dqags_Limit = 500
 
     loop_snr : do while (.true.)
         lock(lck[1])
@@ -457,7 +461,7 @@ program mi_opt
                     f=I, ftarget=real(-nm%bps, 8), &
                     Aineq=Aineq(M_half:M_half, M_half:M_half), bineq=bineq(M_half:M_half), &
                     rhobeg=0.1d0, rhoend=1d-6)
-                ! Final optimization round 
+                ! Final optimization round
                 aux_gmi_s = opt_array(M_half)
                 call noisemapper_set_y_thresholds_uniform(nm) ! first guess
                 opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
