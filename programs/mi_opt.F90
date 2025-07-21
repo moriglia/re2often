@@ -53,6 +53,7 @@ program mi_opt
     logical :: isReverse      ! Whether to calculate the M.I. for the reverse reconciliation
     logical :: isHard         ! Whether to perform hard reverse reconciliation
     logical :: isGMI          ! Compute the GMI instead of the MI
+    logical :: no_s           ! Exclude S from the optimization and default to 1
 
     integer, allocatable :: monoConfig(:)  ! Monotonicity configuration number list
     integer, allocatable :: encConfig(:,:) ! Encoding configuration list, one per row
@@ -188,6 +189,12 @@ program mi_opt
         act='store_true', &
         def='.false.', &
         error=error)
+    call cli%add(switch='--no-s', &
+         help='Do not optimize the S parameter', &
+         required=.false., &
+         act='store_true', &
+         def='.false.', &
+         error=error)
 
     call cli%parse(error=error)
     if (error /= 0) stop
@@ -202,6 +209,7 @@ program mi_opt
     call cli%get(switch='--config-file', val=monoFile)
     call cli%get(switch='--encoding-file', val=encFile)
     call cli%get(switch='--gmi', val=isGMI)
+    call cli%get(switch='--no-s', val=no_s)
 
     if (isHard) then
         isReverse = .true. ! --hard implies --reverse
@@ -377,392 +385,401 @@ program mi_opt
 
      dqags_Limit = 500
 
-    loop_snr : do while (.true.)
-        lock(lck[1])
-        ! Exit if we are about to get an SNR index above nsnr
-        if (snrdb_index[1] .gt. nsnr) then
-            unlock(lck[1])
-            exit loop_snr
-        end if
-        ! Actually get the data
-        i_snr = snrdb_index[1]
-        if (isGMI) then
-            i_encoding = encoding_index[1]
-        end if
-        if (.not. isHard) then
-            i_config = monoconf_index[1]
-        end if
+     if (no_s) then
+         aux_gmi_s = 1d0
+         opt_array(M_half) = 1d0
+     end if
 
-        ! Increment monoconf_index
-        if (isReverse .and. .not. isHard) then
-            monoconf_index[1] = mod(monoconf_index[1], size(monoConfig)) + 1
-        end if
+     loop_snr : do while (.true.)
+         lock(lck[1])
+         ! Exit if we are about to get an SNR index above nsnr
+         if (snrdb_index[1] .gt. nsnr) then
+             unlock(lck[1])
+             exit loop_snr
+         end if
+         ! Actually get the data
+         i_snr = snrdb_index[1]
+         if (isGMI) then
+             i_encoding = encoding_index[1]
+         end if
+         if (.not. isHard) then
+             i_config = monoconf_index[1]
+         end if
 
-        ! Increment encoding_index
-        if (isGMI) then
-            if (isReverse .and. .not. isHard) then
-                if (monoconf_index[1] == 1) then
-                    encoding_index[1] = mod(encoding_index[1], size(encConfig, 1)) + 1
-                end if
-            else ! isHard .or. .not. isReverse
-                encoding_index[1] = mod(encoding_index[1], size(encConfig, 1)) + 1
-            end if
-        end if
+         ! Increment monoconf_index
+         if (isReverse .and. .not. isHard) then
+             monoconf_index[1] = mod(monoconf_index[1], size(monoConfig)) + 1
+         end if
 
-        ! Increment snrdb_index
-        if (isGMI) then
-            if (encoding_index[1] == 1) then
-                if ( isReverse .and. .not. isHard ) then
-                    if (monoconf_index[1] == 1) then
-                        snrdb_index[1] = snrdb_index[1] + 1
-                    end if
-                else
-                    snrdb_index[1] = snrdb_index[1] + 1
-                end if
-            end if
-        else
-            if ( isReverse .and. .not. isHard ) then
-                if (monoconf_index[1] == 1) then
-                    snrdb_index[1] = snrdb_index[1] + 1
-                end if
-            else
-                snrdb_index[1] = snrdb_index[1] + 1
-            end if
-        end if
+         ! Increment encoding_index
+         if (isGMI) then
+             if (isReverse .and. .not. isHard) then
+                 if (monoconf_index[1] == 1) then
+                     encoding_index[1] = mod(encoding_index[1], size(encConfig, 1)) + 1
+                 end if
+             else ! isHard .or. .not. isReverse
+                 encoding_index[1] = mod(encoding_index[1], size(encConfig, 1)) + 1
+             end if
+         end if
 
-        ! Update output
-        write(stdout, '("SNR: ", I0, "/", I0, " ")', advance='no') i_snr, nsnr
-        if (isGMI) then
-            write(stdout, '("ENC: ", I0, "/", I0, " ")', advance='no') i_encoding, size(encConfig, 1)
-        end if
-        if (.not. isHard) then
-            write(stdout, '("CFG: ", I0, "/", I0, " ")', advance='no') i_config, size(monoConfig)
-        end if
-        write(stdout, "(A)"), ""
-        unlock(lck[1])
+         ! Increment snrdb_index
+         if (isGMI) then
+             if (encoding_index[1] == 1) then
+                 if ( isReverse .and. .not. isHard ) then
+                     if (monoconf_index[1] == 1) then
+                         snrdb_index[1] = snrdb_index[1] + 1
+                     end if
+                 else
+                     snrdb_index[1] = snrdb_index[1] + 1
+                 end if
+             end if
+         else
+             if ( isReverse .and. .not. isHard ) then
+                 if (monoconf_index[1] == 1) then
+                     snrdb_index[1] = snrdb_index[1] + 1
+                 end if
+             else
+                 snrdb_index[1] = snrdb_index[1] + 1
+             end if
+         end if
 
-        if (isGMI) then
-            call noisemapper_set_encoding_custom(nm, encConfig(i_encoding, :))
-        end if
-        if (isReverse .and. .not. isHard) then
-            call noisemapper_set_monotonicity(nm, &
-                config_int_to_bool(nm, monoConfig(i_config)))
-        end if
+         ! Update output
+         write(stdout, '("SNR: ", I0, "/", I0, " ")', advance='no') i_snr, nsnr
+         if (isGMI) then
+             write(stdout, '("ENC: ", I0, "/", I0, " ")', advance='no') i_encoding, size(encConfig, 1)
+         end if
+         if (.not. isHard) then
+             write(stdout, '("CFG: ", I0, "/", I0, " ")', advance='no') i_config, size(monoConfig)
+         end if
+         write(stdout, "(A)"), ""
+         unlock(lck[1])
 
-        ! Common setup
-        call noisemapper_update_N0_from_snrdb(nm, snr_array(i_snr))
-        call noisemapper_set_y_thresholds_uniform(nm) ! first guess
-        opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
+         if (isGMI) then
+             call noisemapper_set_encoding_custom(nm, encConfig(i_encoding, :))
+         end if
+         if (isReverse .and. .not. isHard) then
+             call noisemapper_set_monotonicity(nm, &
+                 config_int_to_bool(nm, monoConfig(i_config)))
+         end if
 
-        if (isGMI) then
-            opt_array(M_half) = 1d0
-            if (isHard) then
-                call lincoa( calfun_gmi_hard_opt_s, opt_array(M_half:M_half), &
-                    f=I, ftarget=real(-nm%bps, 8), &
-                    Aineq=Aineq(M_half:M_half, M_half:M_half), bineq=bineq(M_half:M_half), &
-                    rhobeg=0.1d0, rhoend=1d-6)
-                ! Final optimization round
-                aux_gmi_s = opt_array(M_half)
-                call noisemapper_set_y_thresholds_uniform(nm) ! first guess
-                opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
-                call lincoa_optimize_wrapper(calfun_gmi_hard_opt_threshold, opt_array(1:M_half-1))
-            elseif (isReverse) then
-                call lincoa( calfun_gmi_soft_opt_s, opt_array(M_half:M_half), &
-                    f=I, ftarget=real(-nm%bps, 8), &
-                    Aineq=Aineq(M_half:M_half, M_half:M_half), bineq=bineq(M_half:M_half), &
-                    rhobeg=1d0, rhoend=1d-6)
-                aux_gmi_s = opt_array(M_half)
-                call noisemapper_set_y_thresholds_uniform(nm) ! first guess
-                opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
-                call lincoa_optimize_wrapper(calfun_gmi_soft_opt_threshold, opt_array(1:M_half-1))
-            else
-                NOT_IMPLEMENTED()
-            end if
-        else
-            if (isHard) then
-                call lincoa_optimize_wrapper( calfun_mi_hard_opt_threshold, opt_array(1:M_half-1))
-            elseif (isReverse) then
-                call lincoa_optimize_wrapper( calfun_mi_soft_opt_threshold, opt_array(1:M_half-1))
-            else
-                NOT_IMPLEMENTED()
-            end if
-        end if
+         ! Common setup
+         call noisemapper_update_N0_from_snrdb(nm, snr_array(i_snr))
+         call noisemapper_set_y_thresholds_uniform(nm) ! first guess
+         opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
 
-        ! update result
-        I = -I
-        call update_result
-        event post(snr_done(i_snr)[1])
+         if (isGMI) then
+             opt_array(M_half) = 1d0
+             if (isHard) then
+                 if (.not. no_s) then
+                     call lincoa( calfun_gmi_hard_opt_s, opt_array(M_half:M_half), &
+                         f=I, ftarget=real(-nm%bps, 8), &
+                         Aineq=Aineq(M_half:M_half, M_half:M_half), bineq=bineq(M_half:M_half), &
+                         rhobeg=0.1d0, rhoend=1d-6)
+                     ! Final optimization round
+                     aux_gmi_s = opt_array(M_half)
+                 end if
+                 call noisemapper_set_y_thresholds_uniform(nm) ! first guess
+                 opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
+                 call lincoa_optimize_wrapper(calfun_gmi_hard_opt_threshold, opt_array(1:M_half-1))
+             elseif (isReverse) then
+                 if (.not. no_s) then
+                     call lincoa( calfun_gmi_soft_opt_s, opt_array(M_half:M_half), &
+                         f=I, ftarget=real(-nm%bps, 8), &
+                         Aineq=Aineq(M_half:M_half, M_half:M_half), bineq=bineq(M_half:M_half), &
+                         rhobeg=1d0, rhoend=1d-6)
+                     aux_gmi_s = opt_array(M_half)
+                 end if
+                 call noisemapper_set_y_thresholds_uniform(nm) ! first guess
+                 opt_array(1:M_half-1) = nm%y_thresholds(M_half+1 : nm%M-1)
+                 call lincoa_optimize_wrapper(calfun_gmi_soft_opt_threshold, opt_array(1:M_half-1))
+             else
+                 NOT_IMPLEMENTED()
+             end if
+         else
+             if (isHard) then
+                 call lincoa_optimize_wrapper( calfun_mi_hard_opt_threshold, opt_array(1:M_half-1))
+             elseif (isReverse) then
+                 call lincoa_optimize_wrapper( calfun_mi_soft_opt_threshold, opt_array(1:M_half-1))
+             else
+                 NOT_IMPLEMENTED()
+             end if
+         end if
 
-        if (me==1 .and. n_im==1) then
-            ! Query anyways so that we don't have to go throught all branches
-            ! to know whether we completed the computation of the current SNR
-            call event_query(snr_done(i_snr), ii)
-            if (ii == until_count) then
-                call write_result_to_file(i_snr)
-            end if
-        end if
-    end do loop_snr
+         ! update result
+         I = -I
+         call update_result
+         event post(snr_done(i_snr)[1])
 
-100 sync all
+         if (me==1 .and. n_im==1) then
+             ! Query anyways so that we don't have to go throught all branches
+             ! to know whether we completed the computation of the current SNR
+             call event_query(snr_done(i_snr), ii)
+             if (ii == until_count) then
+                 call write_result_to_file(i_snr)
+             end if
+         end if
+     end do loop_snr
 
-contains
+100  sync all
 
-    subroutine lincoa_optimize_wrapper( objective_function, initial_guess )
-        interface
-            subroutine f(x, y)
-                double precision, intent(in) :: x(:)
-                double precision, intent(out) :: y
-            end subroutine f
-        end interface
-        procedure(f) :: objective_function
-        double precision, intent(inout) :: initial_guess(:)
+ contains
 
-        call lincoa(&
-            objective_function, initial_guess, &
-            f=I, &
-            Aineq=A, bineq=b, &
-            rhobeg=(M_half-1)*nm%sigma, rhoend=1d-6, ftarget=real(-nm%bps, 8))
-    end subroutine lincoa_optimize_wrapper
+     subroutine lincoa_optimize_wrapper( objective_function, initial_guess )
+         interface
+             subroutine f(x, y)
+                 double precision, intent(in) :: x(:)
+                 double precision, intent(out) :: y
+             end subroutine f
+         end interface
+         procedure(f) :: objective_function
+         double precision, intent(inout) :: initial_guess(:)
 
-    subroutine calfun_mi_hard_opt_threshold(theta, I_neg)
-        !! Compute \( I(X;\hat{X}) \) with uniform input probabilities
-        !! and varying thresholds
-        double precision, intent(in) :: theta(:)
-        !! Thresholds to be optimized [M/2 + 1, M-1]
-        !! The negative thresholds are assumed to be symmetric
-        double precision, intent(out) :: I_neg
-        !! - I (as the lincoa routine looks for a minimum)
+         call lincoa(&
+             objective_function, initial_guess, &
+             f=I, &
+             Aineq=A, bineq=b, &
+             rhobeg=(M_half-1)*nm%sigma, rhoend=1d-6, ftarget=real(-nm%bps, 8))
+     end subroutine lincoa_optimize_wrapper
 
-        integer :: i, j
+     subroutine calfun_mi_hard_opt_threshold(theta, I_neg)
+         !! Compute \( I(X;\hat{X}) \) with uniform input probabilities
+         !! and varying thresholds
+         double precision, intent(in) :: theta(:)
+         !! Thresholds to be optimized [M/2 + 1, M-1]
+         !! The negative thresholds are assumed to be symmetric
+         double precision, intent(out) :: I_neg
+         !! - I (as the lincoa routine looks for a minimum)
 
-        call noisemapper_set_y_thresholds(nm, [-theta(size(theta):1:-1), 0d0, theta(:)])
-        call noisemapper_update_hard_reverse_tables(nm, .true.)
+         integer :: i, j
 
-        I_neg = 0
-        do j = 0, nm%M-1
-            do i = 0, nm%M-1
-                I_neg = I_neg + nm%fwd_probabilities(i, j) * nm%probabilities(i) * &
-                    (log0(nm%delta_Fy(j)) - log0(nm%fwd_probabilities(i, j)))
-            end do
-        end do
-        I_neg = I_neg/log(2d0)
-    end subroutine calfun_mi_hard_opt_threshold
+         call noisemapper_set_y_thresholds(nm, [-theta(size(theta):1:-1), 0d0, theta(:)])
+         call noisemapper_update_hard_reverse_tables(nm, .true.)
 
-
-    subroutine calfun_mi_soft_opt_threshold(theta, I_neg)
-        !! Compute \( I(X, N;\hat{X}) \) with uniform input probabilities
-        !! and varying thresholds
-        double precision, intent(in) :: theta(:)
-        !! Thresholds to be optimized [M/2 + 1, M-1]
-        !! The negative thresholds are assumed to be symmetric
-        double precision, intent(out) :: I_neg
-        !! - I (as the lincoa routine looks for a minimum)
-
-        real(c_double) :: Abserr
-        integer :: Neval, Ier, Limit, Lenw, Last
-
-        integer :: Iwork(IWORK_SIZE)
-        real(c_double) :: Work(4*IWORK_SIZE)
-        Limit = IWORK_SIZE
-        Lenw = 4*Limit
-
-        call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
-        call noisemapper_set_Fy_grids(nm)
-
-        call dqags(f_soft_reverse, 0d0, 1d0, 1d-12, 1d-6, &
-            I_neg, Abserr, Neval, Ier, &
-            Limit, Lenw, Last, Iwork, Work)
-
-        if (Ier /= 0) then
-            print '("Error at ", f10.3, " [dB]: error ", i1)', snr_array(i_snr), Ier
-        end if
-
-        I_neg = - I_neg - H_Xhat(nm)
-    end subroutine calfun_mi_soft_opt_threshold
-
-    ! +-------------------------------------------------+
-    ! | GMI with joint optimization of thresholds and S |
-    ! +-------------------------------------------------+
-
-    subroutine calfun_gmi_hard_opt_threshold_s(th_s, I_neg)
-        !! Compute \( I_s(X;\hat{\mathbf{B}}) \) with uniform input probabilities
-        !! and varying thresholds and s
-        double precision, intent(in) :: th_s(:)
-        !! Thresholds to be optimized [M/2 + 1, M-1] + s parameters
-        !! The negative thresholds are assumed to be symmetric
-        double precision, intent(out) :: I_neg
-        !! - I (as the lincoa routine looks for a minimum)
-
-        ! double precision, pointer :: ptheta(:)
-        ! double precision, pointer :: ps
-
-        associate( ptheta => th_s(1:M_half-1), ps => th_s(M_half) )
-            call noisemapper_set_y_thresholds(nm, [-ptheta(size(ptheta):1:-1), 0d0, ptheta(:)])
-            call noisemapper_update_hard_reverse_tables(nm, .true.)
-
-            I_neg = -I_s_map_hard_reverse(q_map_hard_product, ps)
-        end associate
-    end subroutine calfun_gmi_hard_opt_threshold_s
+         I_neg = 0
+         do j = 0, nm%M-1
+             do i = 0, nm%M-1
+                 I_neg = I_neg + nm%fwd_probabilities(i, j) * nm%probabilities(i) * &
+                     (log0(nm%delta_Fy(j)) - log0(nm%fwd_probabilities(i, j)))
+             end do
+         end do
+         I_neg = I_neg/log(2d0)
+     end subroutine calfun_mi_hard_opt_threshold
 
 
-    subroutine calfun_gmi_soft_opt_threshold_s(th_s, I_neg)
-        !! Compute \( I_s(X;\hat{\mathbf{B}}) \) with uniform input probabilities
-        !! and varying thresholds and s
-        double precision, intent(in) :: th_s(:)
-        !! Thresholds to be optimized [M/2 + 1, M-1] + s parameters
-        !! The negative thresholds are assumed to be symmetric
-        double precision, intent(out) :: I_neg
-        !! - I (as the lincoa routine looks for a minimum)
+     subroutine calfun_mi_soft_opt_threshold(theta, I_neg)
+         !! Compute \( I(X, N;\hat{X}) \) with uniform input probabilities
+         !! and varying thresholds
+         double precision, intent(in) :: theta(:)
+         !! Thresholds to be optimized [M/2 + 1, M-1]
+         !! The negative thresholds are assumed to be symmetric
+         double precision, intent(out) :: I_neg
+         !! - I (as the lincoa routine looks for a minimum)
 
-        associate( ptheta => th_s(1:M_half-1), ps => th_s(M_half) )
-            call noisemapper_set_y_thresholds(nm, [-ptheta(size(ptheta):1:-1), 0d0, ptheta(:)])
-            call noisemapper_set_Fy_grids(nm)
+         real(c_double) :: Abserr
+         integer :: Neval, Ier, Limit, Lenw, Last
 
-            I_neg = -I_s_map_soft_reverse(q_map_soft_reverse_prod, s=ps)
-        end associate
-    end subroutine calfun_gmi_soft_opt_threshold_s
+         integer :: Iwork(IWORK_SIZE)
+         real(c_double) :: Work(4*IWORK_SIZE)
+         Limit = IWORK_SIZE
+         Lenw = 4*Limit
 
-    ! +-------------------------------------------------+
-    ! | Split and nest optimization of thresholds and S |
-    ! +-------------------------------------------------+
-    subroutine calfun_gmi_hard_opt_threshold(theta, I_neg)
-        double precision, intent(in) :: theta(:)
-        double precision, intent(out) :: I_neg
+         call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
+         call noisemapper_set_Fy_grids(nm)
 
-        call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
-        call noisemapper_update_hard_reverse_tables(nm, .true.)
+         call dqags(f_soft_reverse, 0d0, 1d0, 1d-12, 1d-6, &
+             I_neg, Abserr, Neval, Ier, &
+             Limit, Lenw, Last, Iwork, Work)
 
-        I_neg = - I_s_map_hard_reverse(q_map_hard_product, s=aux_gmi_s)
-    end subroutine calfun_gmi_hard_opt_threshold
+         if (Ier /= 0) then
+             print '("Error at ", f10.3, " [dB]: error ", i1)', snr_array(i_snr), Ier
+         end if
 
+         I_neg = - I_neg - H_Xhat(nm)
+     end subroutine calfun_mi_soft_opt_threshold
 
-    subroutine calfun_gmi_hard_opt_s(s, I_neg)
-        double precision, intent(in) :: s(:)
-        double precision, intent(out) :: I_neg
+     ! +-------------------------------------------------+
+     ! | GMI with joint optimization of thresholds and S |
+     ! +-------------------------------------------------+
 
-        aux_gmi_s = s(1)
-        call noisemapper_set_y_thresholds_uniform(nm)
-        ! call noisemapper_update_hard_reverse_tables(nm, .true.)
-        opt_array(1:M_half-1) = nm%y_thresholds(M_half+1:nm%M-1)
+     subroutine calfun_gmi_hard_opt_threshold_s(th_s, I_neg)
+         !! Compute \( I_s(X;\hat{\mathbf{B}}) \) with uniform input probabilities
+         !! and varying thresholds and s
+         double precision, intent(in) :: th_s(:)
+         !! Thresholds to be optimized [M/2 + 1, M-1] + s parameters
+         !! The negative thresholds are assumed to be symmetric
+         double precision, intent(out) :: I_neg
+         !! - I (as the lincoa routine looks for a minimum)
 
-        call lincoa(calfun_gmi_hard_opt_threshold, opt_array(1:M_half-1), &
-            f=I_neg, ftarget=real(-nm%bps, 8), &
-            rhobeg=nm%sigma*(M_half-1), rhoend=1d-3, &
-            Aineq=Aineq(1:M_half-1,1:M_half-1), bineq=bineq(1:M_half-1))
-    end subroutine calfun_gmi_hard_opt_s
+         ! double precision, pointer :: ptheta(:)
+         ! double precision, pointer :: ps
 
+         associate( ptheta => th_s(1:M_half-1), ps => th_s(M_half) )
+             call noisemapper_set_y_thresholds(nm, [-ptheta(size(ptheta):1:-1), 0d0, ptheta(:)])
+             call noisemapper_update_hard_reverse_tables(nm, .true.)
 
-    subroutine calfun_gmi_soft_opt_threshold(theta, I_neg)
-        double precision, intent(in) :: theta(:)
-        double precision, intent(out) :: I_neg
-
-        call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
-        call noisemapper_set_Fy_grids(nm)
-
-        I_neg = - I_s_map_soft_reverse(q_map_soft_reverse_prod, s=aux_gmi_s)
-    end subroutine calfun_gmi_soft_opt_threshold
+             I_neg = -I_s_map_hard_reverse(q_map_hard_product, ps)
+         end associate
+     end subroutine calfun_gmi_hard_opt_threshold_s
 
 
-    subroutine calfun_gmi_soft_opt_s(s, I_neg)
-        double precision, intent(in) :: s(:)
-        double precision, intent(out) :: I_neg
+     subroutine calfun_gmi_soft_opt_threshold_s(th_s, I_neg)
+         !! Compute \( I_s(X;\hat{\mathbf{B}}) \) with uniform input probabilities
+         !! and varying thresholds and s
+         double precision, intent(in) :: th_s(:)
+         !! Thresholds to be optimized [M/2 + 1, M-1] + s parameters
+         !! The negative thresholds are assumed to be symmetric
+         double precision, intent(out) :: I_neg
+         !! - I (as the lincoa routine looks for a minimum)
 
-        aux_gmi_s = s(1)
-        call noisemapper_set_y_thresholds_uniform(nm)
-        ! call noisemapper_set_Fy_grids(nm)
-        opt_array(1:M_half-1) = nm%y_thresholds(M_half+1:nm%M-1)
+         associate( ptheta => th_s(1:M_half-1), ps => th_s(M_half) )
+             call noisemapper_set_y_thresholds(nm, [-ptheta(size(ptheta):1:-1), 0d0, ptheta(:)])
+             call noisemapper_set_Fy_grids(nm)
 
-        call lincoa(calfun_gmi_soft_opt_threshold, opt_array(1:M_half-1), &
-            f=I_neg, ftarget=real(-nm%bps, 8), &
-            rhobeg=nm%sigma*(M_half-1), rhoend=1d-3, &
-            Aineq=Aineq(1:M_half-1,1:M_half-1), bineq=bineq(1:M_half-1))
-    end subroutine calfun_gmi_soft_opt_s
+             I_neg = -I_s_map_soft_reverse(q_map_soft_reverse_prod, s=ps)
+         end associate
+     end subroutine calfun_gmi_soft_opt_threshold_s
 
-    ! +------------------+
-    ! | Helper functions |
-    ! +------------------+
+     ! +-------------------------------------------------+
+     ! | Split and nest optimization of thresholds and S |
+     ! +-------------------------------------------------+
+     subroutine calfun_gmi_hard_opt_threshold(theta, I_neg)
+         double precision, intent(in) :: theta(:)
+         double precision, intent(out) :: I_neg
 
-    function config_int_to_bool(nm, c) result(b)
-        type(noisemapper_type), intent(in) :: nm
-        integer, intent(in) :: c
-        logical(1) :: b(0:nm%bps-1)
+         call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
+         call noisemapper_update_hard_reverse_tables(nm, .true.)
 
-        integer :: i
-
-        do i = 0, nm%bps-1
-            b(i) = iand(ishft(c, -i), 1) == 1
-        end do
-    end function config_int_to_bool
-
-
-    subroutine write_header(tmpstr, start, end, header)
-        !! print string to header
-        character(20), value, intent(in) :: tmpstr
-        integer, intent(in) :: start
-        integer, intent(in) :: end
-        character(20), intent(inout) :: header(start:end)
-
-        ! character(20) :: tpmcopy
-        integer :: i
-        do i = end, start, -1
-            write(header(i), '(A, "_", I0)') trim(tmpstr), i
-        end do
-
-    end subroutine write_header
+         I_neg = - I_s_map_hard_reverse(q_map_hard_product, s=aux_gmi_s)
+     end subroutine calfun_gmi_hard_opt_threshold
 
 
-    subroutine update_result
-        critical
-            if (I .gt. outdata(i_snr, o_mi)[1]) then
-                outdata(i_snr, o_mi)[1] = I
-                call noisemapper_set_y_thresholds(nm, [-opt_array(M_half-1:1:-1), 0d0, opt_array(:M_half-1)])
-                if (isReverse) then
-                    outdata(i_snr, o_th:o_p-1)[1] = nm%y_thresholds
-                    outdata(i_snr, o_p:o_s-1)[1]  = nm%delta_Fy
-                    if (.not. isHard) then
-                        outdata(i_snr, o_c)[1]    = monoConfig(i_config)
-                    end if
-                end if
-                if (isGMI) then
-                    outdata(i_snr, o_e:o_c-1)[1]  = encConfig(i_encoding, :)
-                    outdata(i_snr, o_s)[1]        = opt_array(M_half)
-                end if
-            end if
-        end critical
-    end subroutine update_result
+     subroutine calfun_gmi_hard_opt_s(s, I_neg)
+         double precision, intent(in) :: s(:)
+         double precision, intent(out) :: I_neg
+
+         aux_gmi_s = s(1)
+         call noisemapper_set_y_thresholds_uniform(nm)
+         ! call noisemapper_update_hard_reverse_tables(nm, .true.)
+         opt_array(1:M_half-1) = nm%y_thresholds(M_half+1:nm%M-1)
+
+         call lincoa(calfun_gmi_hard_opt_threshold, opt_array(1:M_half-1), &
+             f=I_neg, ftarget=real(-nm%bps, 8), &
+             rhobeg=nm%sigma*(M_half-1), rhoend=1d-3, &
+             Aineq=Aineq(1:M_half-1,1:M_half-1), bineq=bineq(1:M_half-1))
+     end subroutine calfun_gmi_hard_opt_s
 
 
-    subroutine write_result_to_file(snr_i)
-        integer, intent(in) :: snr_i
+     subroutine calfun_gmi_soft_opt_threshold(theta, I_neg)
+         double precision, intent(in) :: theta(:)
+         double precision, intent(out) :: I_neg
 
-        outdata(snr_i, 2) = outdata(snr_i, 1) - 10*log10(outdata(snr_i, 3))
-        if (isGMI) then
-            if (isReverse) then
-                if (isHard) then
-                    write(io_log, trim(format_log)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
-                    write(io_csv, trim(format_csv)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
-                else
-                    write(io_log, trim(format_log)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
-                    write(io_csv, trim(format_csv)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
-                end if
-            else
-                NOT_IMPLEMENTED()
-            end if
-        else
-            if (isReverse) then
-                if (isHard) then
-                    write(io_log, trim(format_log)) outdata(snr_i, :o_s-1)
-                    write(io_csv, trim(format_csv)) outdata(snr_i, :o_s-1)
-                else
-                    write(io_log, trim(format_log)) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
-                    write(io_csv, trim(format_csv)) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
-                end if
-            else
-                NOT_IMPLEMENTED()
-            end if
-        end if
-        flush(io_log)
-        flush(io_csv)
-    end subroutine write_result_to_file
+         call noisemapper_set_y_thresholds(nm, [-theta(M_half-1:1:-1), 0d0, theta(:M_half-1)])
+         call noisemapper_set_Fy_grids(nm)
 
-end program mi_opt
+         I_neg = - I_s_map_soft_reverse(q_map_soft_reverse_prod, s=aux_gmi_s)
+     end subroutine calfun_gmi_soft_opt_threshold
+
+
+     subroutine calfun_gmi_soft_opt_s(s, I_neg)
+         double precision, intent(in) :: s(:)
+         double precision, intent(out) :: I_neg
+
+         aux_gmi_s = s(1)
+         call noisemapper_set_y_thresholds_uniform(nm)
+         ! call noisemapper_set_Fy_grids(nm)
+         opt_array(1:M_half-1) = nm%y_thresholds(M_half+1:nm%M-1)
+
+         call lincoa(calfun_gmi_soft_opt_threshold, opt_array(1:M_half-1), &
+             f=I_neg, ftarget=real(-nm%bps, 8), &
+             rhobeg=nm%sigma*(M_half-1), rhoend=1d-3, &
+             Aineq=Aineq(1:M_half-1,1:M_half-1), bineq=bineq(1:M_half-1))
+     end subroutine calfun_gmi_soft_opt_s
+
+     ! +------------------+
+     ! | Helper functions |
+     ! +------------------+
+
+     function config_int_to_bool(nm, c) result(b)
+         type(noisemapper_type), intent(in) :: nm
+         integer, intent(in) :: c
+         logical(1) :: b(0:nm%bps-1)
+
+         integer :: i
+
+         do i = 0, nm%bps-1
+             b(i) = iand(ishft(c, -i), 1) == 1
+         end do
+     end function config_int_to_bool
+
+
+     subroutine write_header(tmpstr, start, end, header)
+         !! print string to header
+         character(20), value, intent(in) :: tmpstr
+         integer, intent(in) :: start
+         integer, intent(in) :: end
+         character(20), intent(inout) :: header(start:end)
+
+         ! character(20) :: tpmcopy
+         integer :: i
+         do i = end, start, -1
+             write(header(i), '(A, "_", I0)') trim(tmpstr), i
+         end do
+
+     end subroutine write_header
+
+
+     subroutine update_result
+         critical
+             if (I .gt. outdata(i_snr, o_mi)[1]) then
+                 outdata(i_snr, o_mi)[1] = I
+                 call noisemapper_set_y_thresholds(nm, [-opt_array(M_half-1:1:-1), 0d0, opt_array(:M_half-1)])
+                 if (isReverse) then
+                     outdata(i_snr, o_th:o_p-1)[1] = nm%y_thresholds
+                     outdata(i_snr, o_p:o_s-1)[1]  = nm%delta_Fy
+                     if (.not. isHard) then
+                         outdata(i_snr, o_c)[1]    = monoConfig(i_config)
+                     end if
+                 end if
+                 if (isGMI) then
+                     outdata(i_snr, o_e:o_c-1)[1]  = encConfig(i_encoding, :)
+                     outdata(i_snr, o_s)[1]        = opt_array(M_half)
+                 end if
+             end if
+         end critical
+     end subroutine update_result
+
+
+     subroutine write_result_to_file(snr_i)
+         integer, intent(in) :: snr_i
+
+         outdata(snr_i, 2) = outdata(snr_i, 1) - 10*log10(outdata(snr_i, 3))
+         if (isGMI) then
+             if (isReverse) then
+                 if (isHard) then
+                     write(io_log, trim(format_log)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
+                     write(io_csv, trim(format_csv)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c-1))
+                 else
+                     write(io_log, trim(format_log)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
+                     write(io_csv, trim(format_csv)) outdata(snr_i, :o_s), int(outdata(snr_i, o_e:o_c))
+                 end if
+             else
+                 NOT_IMPLEMENTED()
+             end if
+         else
+             if (isReverse) then
+                 if (isHard) then
+                     write(io_log, trim(format_log)) outdata(snr_i, :o_s-1)
+                     write(io_csv, trim(format_csv)) outdata(snr_i, :o_s-1)
+                 else
+                     write(io_log, trim(format_log)) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
+                     write(io_csv, trim(format_csv)) outdata(snr_i, :o_s-1), int(outdata(snr_i, o_c))
+                 end if
+             else
+                 NOT_IMPLEMENTED()
+             end if
+         end if
+         flush(io_log)
+         flush(io_csv)
+     end subroutine write_result_to_file
+
+ end program
