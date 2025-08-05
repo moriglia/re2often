@@ -26,7 +26,7 @@ module re2often_mi
     implicit none
 
     private
-    public :: I_soft_reverse_equidistant_th, I_soft_reverse_uniform_output_th
+    public :: I_soft_reverse_equidistant_th, I_soft_reverse_uniform_output_th, I_soft_reverse
     public :: I_hard_reverse_equidistant_th, I_hard_reverse_uniform_output_th
     public :: I_direct
     public :: H_Xhat, H_Xhat_cond_X
@@ -194,7 +194,7 @@ module re2often_mi
 
     public :: I_s_map_soft_reverse
     public :: q_map_soft_reverse_prod
-    
+
 contains
 
     real(c_double) elemental function log0(arg, base) result(l)
@@ -335,6 +335,27 @@ contains
 
         I = I + H_Xhat(nm)
     end function I_soft_reverse_uniform_output_th
+
+
+    real(c_double) function I_soft_reverse(nm) result(I)
+        !! Mutual information of the soft reverse reconciliation scheme
+        type(noisemapper_type), intent(in) :: nm
+        !! SNR [dB] at which to calculate the mutual information
+
+        real(c_double) :: Abserr
+        integer :: Neval, Ier, Limit, Lenw, Last
+
+        integer :: Iwork(100)
+        real(c_double) :: Work(400)
+        Limit = 100
+        Lenw = 400
+
+        call dqags(f_soft_reverse, 0d0, 1d0, 1d-12, 1d-6, &
+            I, Abserr, Neval, Ier, &
+            Limit, Lenw, Last, Iwork, Work)
+
+        I = I + H_Xhat(nm)
+    end function I_soft_reverse
 
     ! +-----------------------------+
     ! | Hard reverse reconciliation |
