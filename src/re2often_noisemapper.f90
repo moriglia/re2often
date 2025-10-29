@@ -873,6 +873,14 @@ contains
         real(c_double) :: y_l, y_h, resolution, Fy_l, Fy_h, Fy_next
         integer :: i
 
+        if (Fy == 0) then
+           y = -1d300
+           return
+        else if (Fy==1) then
+           y = 1d300
+           return
+        end if
+
         ! Setup resolution
         if (present(res)) then
             resolution = res
@@ -910,7 +918,7 @@ contains
             y_l = 0
             y_h = 1
             Fy_h = noisemapper_Fy(nm, y_h)
-            do while (noisemapper_Fy(nm, y_h) .lt. Fy)
+            do while (Fy_h .lt. Fy)
                 y_l = y_h
                 y_h = 2*y_h
                 Fy_l = Fy_h
