@@ -124,6 +124,11 @@ module re2often_noisemapper
         module procedure noisemapper_soft_reverse_lappr_array
     end interface noisemapper_soft_reverse_lappr
 
+    interface noisemapper_set_monotonicity
+        module procedure noisemapper_set_monotonicity_array
+        module procedure noisemapper_set_monotonicity_from_integer
+    end interface noisemapper_set_monotonicity
+
 contains
 
 
@@ -602,7 +607,7 @@ contains
     end subroutine noisemapper_deallocate_reverse_soft
 
 
-    module subroutine noisemapper_set_monotonicity(nm, config)
+    module subroutine noisemapper_set_monotonicity_array(nm, config)
         !! Set monotonicity configuration
         type(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
@@ -623,7 +628,27 @@ contains
             nm%monotonicity_configuration(0::2) = .false.
             nm%monotonicity_configuration(1::2) = .true.
         end if
-    end subroutine noisemapper_set_monotonicity
+    end subroutine noisemapper_set_monotonicity_array
+
+
+    module subroutine noisemapper_set_monotonicity_from_integer(nm, config)
+        !! Set monotonicity configuration from index
+        type(noisemapper_type), intent(inout) :: nm
+        !! Noisemapper
+        integer(c_int), intent(in) :: config
+        !! Configuration number
+
+        logical(c_bool) :: config_l(0:nm%M-1)
+        integer :: k, cfg
+
+        cfg = config
+        do k = 0, nm%M-1
+            config_l(k) = mod(cfg, 2) == 1
+            cfg = ishft(cfg, -1)
+        end do
+        call noisemapper_set_monotonicity_array(nm, config_l)
+    end subroutine noisemapper_set_monotonicity_from_integer
+
 
 
     module subroutine noisemapper_generate_soft_metric_single(nm, y, n, xhat)
