@@ -9,6 +9,7 @@ auto-executables = false
 auto-examples = false
 auto-tests = false
 external-modules = ["lincoa_mod"]
+link = ["primaf"]
 
 [preprocess]
 [preprocess.cpp]
