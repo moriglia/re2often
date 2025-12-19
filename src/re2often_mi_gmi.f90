@@ -442,4 +442,85 @@ contains
             q = q / (f_N_given_X**nm%bps)
         end if
     end function q_map_soft_reverse_prod
+
+
+    module function I_s_ml_soft_reverse(nmm, s) result(I_s)
+        !! Compute the GMI in the Maximum-Likelyhood version
+        !! Note that for this function I changed the computation approach
+        !! Now the metric function is implicit and the noisemapper is explicit
+        type(noisemapper_type),   intent(in) :: nmm
+        real(c_double), optional, intent(in) :: s
+        real(c_double)                       :: I_s
+
+        real(c_double) :: s_local
+
+        real(c_double) :: Abserr
+        integer :: Neval, Ier, Lenw, Last
+        integer, allocatable :: Iwork(:)
+        real(c_double), allocatable :: Work(:)
+
+        allocate(Iwork(dqags_Limit))
+        Lenw = 4*dqags_Limit
+        allocate(Work(Lenw))
+
+        if (present(s)) then
+            s_local = s
+        else
+            s_local = 1
+        end if
+
+        call dqags(f_integrand, 0d0, 1d0, 1d-12, 1d-6, &
+            I_s, Abserr, Neval, Ier, &
+            dqags_Limit, Lenw, Last, Iwork, Work)
+        I_s = I_s / log(2d0)
+    contains
+        real(c_double) impure elemental function qfunc(xhat, x, n) result(q)
+            integer,        intent(in) :: xhat
+            integer,        intent(in) :: x
+            real(c_double), intent(in) :: n
+
+            integer :: l, xhat_var
+            real(c_double) :: denom, num
+
+            q = 1
+            do l = 0, nmm%bps-1
+                num   = 0
+                denom = 0
+                do xhat_var = 0, nmm%M-1
+                    if (nmm%s_to_b(xhat_var, l) .eqv. nmm%s_to_b(xhat, l)) then
+                        num   = num   + f_xhat_n_cond_x(nmm, n, xhat_var, x)
+                        denom = denom + nmm%delta_Fy(xhat_var)
+                    end if
+                end do
+                q = q * num/denom
+            end do
+            q = q * nmm%probabilities(x)**nmm%bps
+        end function qfunc
+
+        real(c_double) function f_integrand(n) result(f)
+            real(c_double), intent(in) :: n
+
+            real(c_double) :: q, f_n_cond_x, w, f_tmp, expected_q
+            integer :: x, xhat
+
+            f = 0
+            do x = 0, nmm%M-1
+                f_n_cond_x = 0
+                f_tmp      = 0
+                expected_q = 0
+
+                do xhat = 0, nmm%M-1
+                    q = qfunc(xhat, x, n)
+                    w = f_xhat_n_cond_x(nmm, n, xhat, x)
+
+                    f_n_cond_x = f_n_cond_x + w
+                    f_tmp      = f_tmp      + w*log0(q)
+                    expected_q = expected_q + nmm%delta_Fy(xhat)*(q**s_local)
+                end do
+                f_tmp = f_tmp*s_local - f_n_cond_x * log0(expected_q)
+                f     = f + f_tmp*nmm%probabilities(x)
+            end do
+        end function f_integrand
+    end function I_s_ml_soft_reverse
+
 end submodule re2often_mi_gmi

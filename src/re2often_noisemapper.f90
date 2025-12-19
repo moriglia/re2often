@@ -979,4 +979,29 @@ contains
         end do
         call noisemapper_set_y_thresholds(nm, thresholds)
     end subroutine noisemapper_set_y_thresholds_uniform
+
+    real(c_double) impure elemental module function f_xhat_n_cond_x(nm, n, xhat, x) result(pdf)
+        !! PDF of \(N, \hat{X}|X\)
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: n
+        !! Soft metric
+        integer(c_int), intent(in) :: xhat
+        !! Bob's decided symbol (index within constellation)
+        integer(c_int), intent(in) :: x
+        !! Alice's transmitted symbol (index within constellation)
+
+        integer :: k
+        real(c_double) :: a_j, two_y_i
+
+        pdf = 0
+
+        a_j = nm%constellation(x)
+        two_y_i = 2*noisemapper_invert_soft_metric_search(nm, n, xhat)
+        do k = 0, nm%M-1
+            pdf = pdf + nm%probabilities(k) * &
+                exp((nm%constellation(k) - a_j)*(two_y_i - nm%constellation(k) - a_j)/nm%N0)
+        end do
+        pdf = nm%delta_Fy(xhat) / pdf
+    end function f_xhat_n_cond_x
 end module re2often_noisemapper

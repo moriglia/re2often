@@ -28,6 +28,7 @@ program gmi
     use forbear, only: bar_object
     use re2often_mi ! defines a noisemapper_type object
     use flap ! CLI parser: command_line_interface
+    use lincoa_mod
     implicit none
 
     ! +---------------------+
@@ -51,7 +52,14 @@ program gmi
     integer :: monoConfig     ! Selected monotonicity configuration
     logical :: encodingNatural
     logical :: useML
+    logical :: editOutProbs
+    logical :: optimize_s
     integer, allocatable :: encodingVector(:)
+    double precision, allocatable :: prob_out(:)
+    double precision, allocatable :: thresholds(:)
+    double precision :: s(1)
+    integer :: M_half
+    double precision :: I_neg
 
     type(command_line_interface) :: cli
     integer :: error
@@ -163,7 +171,20 @@ program gmi
         nargs='+', &
         def='0', & ! Does not mean anything, just to prevent the cli to complain
         error=error)
-
+    call cli%add(switch='--prob-out', &
+         help="Set output probabilities (specify the probabilities of the top M/2-1 but last symbols)",&
+         required=.false.,&
+         nargs='+',&
+         act="store",&
+         def='0.25',&
+         error=error)
+    call cli%add(switch='--opt-s', &
+         help="Optimise parameter S",&
+         required=.false.,&
+         nargs='+',&
+         act="store_true",&
+         def='.false.',&
+         error=error)
 
 
     call cli%parse(error=error)
@@ -179,9 +200,14 @@ program gmi
     call cli%get(switch='-u', val=uniform_th)
     call cli%get(switch='--natural', val=encodingNatural)
     call cli%get(switch='--ml', val=useML)
+    call cli%get(switch='--opt-s', val=optimize_s)
 
     if (cli%is_passed(switch='--encoding')) then
         call cli%get_varying(switch='--encoding', val=encodingVector)
+    end if
+    editOutProbs = cli%is_passed(switch='--prob-out')
+    if (editOutProbs) then
+        call cli%get_varying(switch='--prob-out', val=prob_out)
     end if
 
     editConfig = cli%is_passed(switch="-c")
@@ -208,13 +234,15 @@ program gmi
     if (me==1) then
         snr_done(:) = .false.
         outdata(:, 1) = [(snr(1) + real(ii, dp)*(snr(2)-snr(1))/real(nsnr - 1, dp), ii = 0, nsnr-1)]
-        outdata(:,2:) = 0
+        outdata(:,2:3) = 0
+        outdata(:, 4) = 1d0
     end if
     ! snrdb        => outdata(:, 1)[1]
     ! snrdb_scaled => outdata(:, 2)[1]
     ! I            => outdata(:, 3)[1]
 
     nm = noisemapper_create(bps)
+    M_half = ishft(nm%M, -1)
     if (encodingNatural) then
         call noisemapper_set_encoding_natural(nm)
         if (me == 1 .and. cli%is_passed(switch='--encoding')) then
@@ -238,6 +266,9 @@ program gmi
             end do
         end if
     end if
+    if (editOutProbs) then
+        allocate(thresholds(nm%M-1))
+    end if
 
     i_snr = 1
     loop_snr : do while (i_snr .le. nsnr)
@@ -255,7 +286,14 @@ program gmi
         call noisemapper_update_N0_from_snrdb(nm, outdata(i_snr, 1)[1])
         sqrtN0 = sqrt(nm%N0)
 
-        if (uniform_th) then
+        if (editOutProbs) then
+            thresholds(M_half) = 0d0
+            do ii = 1,M_half-1
+                thresholds(M_half+ii) = noisemapper_inverse_Fy_search(nm, 0.5d0 + sum(prob_out(:ii)))
+                thresholds(M_half-ii) = -thresholds(M_half + ii)
+            end do
+            call noisemapper_set_y_thresholds(nm, thresholds)
+        else if (uniform_th) then
             call noisemapper_set_y_thresholds_uniform(nm)
         else
             call noisemapper_set_y_thresholds(nm)
@@ -270,15 +308,26 @@ program gmi
                     outdata(i_snr, 3)[1] = I_s_map_hard_reverse(q_map_hard_product)
                 end if
             else
-                if (useML) then
-                    if (me == 1) then
-                        print *, "Not implemented"
-                    end if
-                    stop
-                end if
                 call noisemapper_set_Fy_grids(nm)
-                outdata(i_snr, 3)[1] = I_s_map_soft_reverse(q_map_soft_reverse_prod)
-                ! outdata(i_snr, 3)[1] = I_s_BN_Xhat()
+                if (useML) then
+                    if (optimize_s) then
+                        s(1) = 1d0
+                        call lincoa(gmi_ml_reverse_soft_s, s, f=I_neg, xl=[1d-9])
+                        outdata(i_snr, 3)[1] = -I_neg
+                        outdata(i_snr, 4)[1] = s(1)
+                    else
+                        outdata(i_snr, 3)[1] = I_s_ml_soft_reverse(nm)
+                    end if
+                else
+                    if (optimize_s) then
+                        s(1) = 1d0
+                        call lincoa(gmi_map_reverse_soft_s, s, f=I_neg, xl=[1d-9])
+                        outdata(i_snr, 3)[1] = -I_neg
+                        outdata(i_snr, 4)[1] = s(1)
+                    else
+                        outdata(i_snr, 3)[1] = I_s_map_soft_reverse(q_map_soft_reverse_prod)
+                    end if
+                end if
             end if
         else
             if (useML) then
@@ -298,12 +347,20 @@ program gmi
 
     if (me == 1) then
         outdata(:, 2) = outdata(:, 1) - 10*log10(outdata(:,3))
-        if (uniform_th) then
+        if (editOutProbs) then
+            output_root = trim(output_root)//"/prob_out_custom/"
+            write(output_root, '(A, "p", f6.4)') trim(output_root), prob_out(1)
+            do ii = 2, M_half-1
+                write(output_root, '(A, "_p", f6.4)') trim(output_root), prob_out(ii)
+            end do
+        else if (uniform_th) then
             output_root = trim(output_root)//"/uniform"
         else
             output_root = trim(output_root)//"/equidis"
         end if
-        outdata(:, 4) = 1d0 ! Optimization not implemented
+        if (optimize_s) then
+            output_root = trim(output_root)//"/opt_s"
+        end if
 
         call make_directory_and_file_name(output_root, bps, isReverse, isHard, &
             snr, nsnr, 0, 0, 0, 0, output_dir, output_name)
@@ -328,4 +385,25 @@ program gmi
         call to_file(x=outdata, file=trim(output_dir)//"/"//trim(output_name)//".csv", &
             header=header, fmt="e")
     end if
+
+contains
+
+    subroutine not_implemented
+        print *, "Not implemented"; stop
+    end subroutine not_implemented
+
+    subroutine gmi_map_reverse_soft_s(s, I_neg)
+        double precision, intent(in)  :: s(:)
+        double precision, intent(out) :: I_neg
+
+        I_neg = -I_s_map_soft_reverse(q_map_soft_reverse_prod, s(1))
+    end subroutine gmi_map_reverse_soft_s
+
+    subroutine gmi_ml_reverse_soft_s(s, I_neg)
+        double precision, intent(in)  :: s(:)
+        double precision, intent(out) :: I_neg
+
+        I_neg = -I_s_ml_soft_reverse(nm, s(1))
+    end subroutine gmi_ml_reverse_soft_s
+
 end program gmi

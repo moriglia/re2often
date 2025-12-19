@@ -180,6 +180,17 @@ module re2often_mi
          end function q_map_soft_reverse_prod
      end interface
 
+     interface
+         module function I_s_ml_soft_reverse(nmm, s) result(I_s)
+             !! Compute the GMI in the Maximum-Likelyhood version
+             !! Note that for this function I changed the computation approach
+             !! Now the metric function is implicit and the noisemapper is explicit
+             type(noisemapper_type),   intent(in) :: nmm
+             real(c_double), optional, intent(in) :: s
+             real(c_double)                       :: I_s
+         end function I_s_ml_soft_reverse
+     end interface
+
     real(c_double), parameter :: sqrtPi = sqrt(acos(-1d0))
     real(c_double) :: sqrtN0
     integer :: dqags_Limit = 100
@@ -194,6 +205,8 @@ module re2often_mi
 
     public :: I_s_map_soft_reverse
     public :: q_map_soft_reverse_prod
+
+    public :: I_s_ml_soft_reverse
 
 contains
 
