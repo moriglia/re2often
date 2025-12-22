@@ -18,7 +18,7 @@ program reverse_reconciliation
     !! license: GPL-3.0-or-later
     !!
     !! Perform reverse reconciliation Montecarlo Simulation
-    use iso_fortran_env, only: dp => real64
+    use iso_fortran_env, only: dp => real64, event_type
     use io_fortran_lib, only: from_file, to_file
     use stdlib_random, only: stdlib_random_seed => random_seed
     use stdlib_stats_distribution_normal, only: rvs_normal
@@ -40,7 +40,7 @@ program reverse_reconciliation
     character(250) :: output_root
     character(250) :: output_dir
     character(250) :: output_name
-    integer        :: io
+    integer        :: io_log, io_csv
     double precision :: snr(2)         ! Signal to Noise Ratio in dB
     integer :: nsnr           ! Number of SNR points
     integer :: bps            ! Bits per symbol
@@ -97,6 +97,8 @@ program reverse_reconciliation
     type(noisemapper_type) :: nm
 
     type(bar_object) :: progress_bar
+    type(event_type), allocatable :: snr_done(:)[:]
+
 
 
     ! generic iteration variables
@@ -287,6 +289,9 @@ program reverse_reconciliation
 
     allocate(word(decoder%cnum))
     allocate(synd(decoder%cnum))
+    if (n_im > 4) then
+        allocate(snr_done(nsnr)[*])
+    end if
 
     nm = noisemapper_create(bps)
     if (encodingNatural) then
@@ -304,7 +309,7 @@ program reverse_reconciliation
         print '("Each frame carries ", i6, " information bits.")', decoder%vnum - decoder%cnum
         print '("Performing ", i3, " iterations.")', max_iter
         print *, "SNR [dB] range:", snrdb(1), snrdb(size(snrdb))
-        print '("Simulation loops: at least", i6, " up to ", i6, " or at least ", i3, " frame errors are found")', &
+        print '("Simulation loops: at least", i0, " up to ", i0, " or at least ", i0, " frame errors are found")', &
             min_sim, max_sim, min_ferr
         print '("Constellation has ", i3, " symbols, each carrying ", i3, " bits")', nm%M, nm%bps
         if (isHard) then
@@ -329,7 +334,52 @@ program reverse_reconciliation
             filled_char_string='+', prefix_string='SNR points progress |',&
             suffix_string='| ', add_progress_percent=.true.)
         call progress_bar%start
+
+        if  (n_im > 4) then
+            if (alpha == 1d0) then
+                call make_directory_and_file_name(output_root, bps, .true., isHard, &
+                    snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
+                    output_dir, output_name)
+            else
+                call make_directory_and_file_name(output_root, bps, .true., isHard, &
+                    snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
+                    output_dir, output_name, alpha)
+            end if
+            call execute_command_line("mkdir -p " // trim(output_dir))
+            open(newunit=io_log, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
+                status="replace", action="write")
+            open(newunit=io_csv, file=trim(output_dir) // "/" // trim(output_name) // ".csv", &
+                status="replace", action="write")
+            write(io_log, '(A, T16, A, T32, A, T48, A, T64, A, T80, A)') &
+                "SNR [dB]", "F_NUM", "ERR", "BER", "FERR", "FER"
+            write(io_csv, '(A, ",", A, ",", A, ",", A, ",", A, ",", A)') &
+                "SNR", "F_NUM", "ERR", "BER", "FERR", "FER"
+            flush(io_log)
+            flush(io_csv)
+            do i_snr = 1, nsnr
+                event wait (snr_done(i_snr), until_count=n_im-1)
+                if (b_err(i_snr) == 0) then
+                    ber(i_snr) = 0
+                    fer(i_snr) = 0
+                else
+                    ber(i_snr) = real(b_err(i_snr), dp)/real(f_cnt(i_snr), dp)/real(K, dp)
+                    fer(i_snr) = real(f_err(i_snr), dp)/real(f_cnt(i_snr), dp)
+                end if
+
+                write(io_log, '(f12.3, T16, I6, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
+                    snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
+                write(io_csv, '(f7.3, ",", I0, ",", I0, ",", ES9.5E1, ",", I0, ",", ES9.5E1)') &
+                    snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
+                flush(io_log)
+                flush(io_csv)
+                call progress_bar%update(current=real(i_snr, 8)/real(nsnr, 8))
+            end do
+            close(io_log)
+            close(io_csv)
+            stop
+        end if
     end if
+
 
     loop_snr : do i_snr = 1, nsnr
         call noisemapper_update_N0_from_snrdb(nm, snrdb(i_snr))
@@ -352,11 +402,11 @@ program reverse_reconciliation
             ! of the argument of the log, and lappr(1:bps) for the numerator
             lappr(1 : 2*bps) = 0
             do i = 1, bps
-                do io = 0, nm%M-1
-                    if (nm%s_to_b(io, i-1)) then
-                        lappr(bps + i) = lappr(bps + i) + nm%delta_Fy(io)
+                do io_log = 0, nm%M-1
+                    if (nm%s_to_b(io_log, i-1)) then
+                        lappr(bps + i) = lappr(bps + i) + nm%delta_Fy(io_log)
                     else
-                        lappr(i) = lappr(i) + nm%delta_Fy(io)
+                        lappr(i) = lappr(i) + nm%delta_Fy(io_log)
                     end if
                 end do
             end do
@@ -394,7 +444,7 @@ program reverse_reconciliation
                     call noisemapper_convert_symbol_to_hard_lappr(nm, x_i, lappr)
                 end if
             else
-                call noisemapper_soft_reverse_lappr(nm, x_i, nhat, lappr, 1d-12)
+                call noisemapper_soft_reverse_lappr(nm, x_i, nhat, lappr, 1d-9)
             end if
             lappr = alpha*lappr
 
@@ -417,18 +467,25 @@ program reverse_reconciliation
 
             if (((f_err(i_snr)[1] .ge. min_ferr) .and. &
                 (f_cnt(i_snr)[1] .ge. min_sim)) .or. (f_cnt(i_snr)[1] .ge. max_sim) ) then
-                if (me==1) then
+                if (me==1 .and. n_im < 5) then
                     call progress_bar%update(current=real(i_snr, 8)/real(nsnr, 8))
                 end if
                 exit loop_frame
             end if
         end do loop_frame
+        if (n_im > 4) then
+            event post(snr_done(i_snr)[1])
+        end if
         if (i_snr .ge. 3) then
             if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
                 ! Check again after 10 seconds, so that if new errors pop up from other images, we keep helping them
                 call sleep(10)
                 if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
-                    if (me==1) then
+                    if (n_im > 4) then
+                        do i = i_snr+1, nsnr
+                            event post(snr_done(i)[1])
+                        end do
+                    else if (me==1) then
                         call progress_bar%update(current=1d0)
                         call progress_bar%destroy
                     end if
@@ -455,10 +512,10 @@ program reverse_reconciliation
             print *, trim(output_name)
         end if
         call execute_command_line("mkdir -p " // trim(output_dir))
-        open(newunit=io, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
+        open(newunit=io_log, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
             status="replace", action="write")
 
-        write(io, '(A, T16, A, T32, A, T48, A, T64, A, T80, A)') "SNR [dB]", "F_NUM", "ERR", "BER", "FERR", "FER"
+        write(io_log, '(A, T16, A, T32, A, T48, A, T64, A, T80, A)') "SNR [dB]", "F_NUM", "ERR", "BER", "FERR", "FER"
         do i_snr = 1, nsnr
             if (b_err(i_snr) == 0) then
                 ber(i_snr) = 0
@@ -468,10 +525,10 @@ program reverse_reconciliation
                 fer(i_snr) = real(f_err(i_snr), dp)/real(f_cnt(i_snr), dp)
             end if
 
-            write(io, '(f12.3, T16, I6, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
+            write(io_log, '(f12.3, T16, I6, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
                 snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
         end do
-        close(io)
+        close(io_log)
 
         ! call to_file(x=outdata, file=output_file, header=["SNR", "BER", "FER"], fmt="f")
         if (alpha == 1d0) then

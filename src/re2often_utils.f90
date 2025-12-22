@@ -157,7 +157,7 @@ contains
         write(output_file, '("snr_", 2(SP, F0.3, "_"))') snr(1), snr(2)
         write(output_file, '(A, I0)') trim(output_file), nsnr
         write(output_file, '(A, "_it", I0)') trim(output_file), max_iter
-        write(output_file, '(A, "_sim", I4.4, "_", I6.6, "_ferr", I4.4)') trim(output_file), &
+        write(output_file, '(A, "_sim", I0, "_", I0, "_ferr", I0)') trim(output_file), &
             min_sim, max_sim, min_ferr
 
         if (present(alpha)) then
