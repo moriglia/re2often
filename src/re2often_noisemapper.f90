@@ -896,8 +896,6 @@ contains
         !! output channel value whose CDF is `Fy`
 
         real(c_double) :: y_l, y_h, resolution, Fy_l, Fy_h, Fy_next
-        real(c_double) :: diffFy
-        integer :: i
 
         if (Fy == 0) then
            y = -1d300
@@ -952,11 +950,12 @@ contains
             end do
         end if
 
-        diffFy = (Fy_h-Fy_l)
-100     find_y: do while ( diffFy .gt. resolution)
-            ! y = (y_h + y_l)/2
-            y = y_l + (Fy-Fy_l)*(y_h-y_l)/diffFy ! linear interpolation
+100     find_y: do while (.true.)
+            y = y_l + (Fy-Fy_l)*(y_h-y_l)/(Fy_h - Fy_l) ! linear interpolation
             Fy_next = noisemapper_Fy(nm, y)
+            if (abs(Fy-Fy_next) .lt. resolution) then
+                return
+            end if
             if (Fy_next .gt. Fy) then
                 y_h = y
                 Fy_h = Fy_next
@@ -964,7 +963,6 @@ contains
                 y_l = y
                 Fy_l = Fy_next
             end if
-            diffFy = (Fy_h-Fy_l)
         end do find_y
     end function noisemapper_inverse_Fy_search
 
