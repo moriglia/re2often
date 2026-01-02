@@ -80,8 +80,7 @@ program reverse_reconciliation
     integer, allocatable :: f_cnt(:)[:] ! Total frame count per SNR value
 
     integer, allocatable :: x_i(:) ! Indexes of generated symbols
-    ! double precision, allocatable :: x(:), y(:), lappr(:), lappr_out(:)
-    double precision, allocatable :: y(:), lappr(:), lappr_out(:)
+    double precision, allocatable :: y(:), lappr(:)
     ! generated symbol, Gaussian channel output, LAPPRs before and after decoding
     double precision, allocatable :: nhat(:) ! Soft Metric
     integer, allocatable :: xhat(:) ! Decided symbol
@@ -278,14 +277,13 @@ program reverse_reconciliation
     end if
 
     allocate(x_i(decoder%vnum/bps))
-    ! allocate(x(decoder%vnum/bps))
     allocate(y(decoder%vnum/bps))
 
     allocate(xhat(decoder%vnum/bps))
     allocate(nhat(decoder%vnum/bps))
 
     allocate(lappr(decoder%vnum))
-    allocate(lappr_out(decoder%vnum))
+    ! allocate(lappr_out(decoder%vnum))
 
     allocate(word(decoder%cnum))
     allocate(synd(decoder%cnum))
@@ -452,15 +450,16 @@ program reverse_reconciliation
                 call noisemapper_soft_reverse_lappr(nm, x_i, nhat, lappr, 1d-9)
             end if
             lappr = alpha*lappr
+            if (alpha /=1) lappr = alpha*lappr
 
             if (useInterleaver) then
                 call shuffle_word_and_lappr(word, lappr)
             end if
             synd = decoder%word_to_synd(word)
             N_iter = max_iter
-            call decoder%decode(lappr, lappr_out, synd, N_iter)
+            call decoder%decode_flood(lappr, synd, N_iter)
 
-            new_errors = count( (lappr_out(:K) < 0) .neqv. word(:K) )
+            new_errors = count( (lappr(:K) < 0) .neqv. word(:K) )
 
             critical
                 if (new_errors .gt. 0) then
