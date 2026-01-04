@@ -378,12 +378,6 @@ program reverse_reconciliation
         end if
     end if
 
-    if (n_im>4) then
-        max_sim = max_sim/(n_im-1) + 1
-    else
-        max_sim = max_sim/n_im + 1
-    end if
-
     loop_snr : do i_snr = 1, nsnr
         call noisemapper_update_N0_from_snrdb(nm, snrdb(i_snr))
         ! if (uniform_th .or. (.not. isHard)) then
