@@ -62,7 +62,7 @@ main = "configurations_list.f90"
 
 [executable.dependencies]
 forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
-fldpc = { git="https://codeberg.org/moriglia/fldpc.git", tag="v1.3" }
+fldpc = { git="https://codeberg.org/moriglia/fldpc.git", tag="v1.3.3" }
 stdlib = "*"
 FLAP = { git="https://github.com/szaghi/FLAP.git", tag="v1.2.5" }
 

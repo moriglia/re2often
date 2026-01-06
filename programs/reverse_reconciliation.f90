@@ -55,6 +55,7 @@ program reverse_reconciliation
     logical :: doEve          ! Eve is performing error correction
     logical :: useInterleaver ! Scramble bits
     logical :: encodingNatural ! Use natural encoding
+    logical :: direct_r       ! Perform direct reconciliation
 
     integer, allocatable :: edge_definition(:,:)
 
@@ -137,6 +138,7 @@ program reverse_reconciliation
     doEve = .false.
     useInterleaver = .false.
     encodingNatural = .false.
+    direct_r = .false.
 
     i = 1
     do while(i <= argc)
@@ -199,6 +201,9 @@ program reverse_reconciliation
             i = i + 1
         elseif (argv(i) == "--natural") then
             encodingNatural = .true.
+            i = i + 1
+        elseif (argv(i) == "--direct") then
+            direct_r = .true.
             i = i + 1
         else
             print *, "Unrecognized argument: ", argv(i)
@@ -425,6 +430,18 @@ program reverse_reconciliation
             ! AWGN channel
             y    = rvs_normal(loc=y, scale=nm%sigma)
 
+            if (direct_r) then
+                call noisemapper_y_to_lappr(nm, y, lappr)
+                word = noisemapper_symbol_to_word(nm, x_i)
+                if (useInterleaver) then
+                    call shuffle_word_and_lappr(word, lappr)
+                end if
+                synd = decoder%word_to_synd(word)
+                N_iter = max_iter
+                call decoder%decode_sparse_box_minus(lappr, synd, N_iter)
+                goto 100
+            end if
+
             ! Bob evaluates the soft metric, takes the decisions
             if (isHard) then
                 xhat = noisemapper_decide_symbol(nm, y)
@@ -451,9 +468,9 @@ program reverse_reconciliation
             end if
             synd = decoder%word_to_synd(word)
             N_iter = max_iter
-            call decoder%decode_flood(lappr, synd, N_iter)
+            call decoder%decode_sparse_box_minus(lappr, synd, N_iter)
 
-            new_errors = count( (lappr(:K) < 0) .neqv. word(:K) )
+100         new_errors = count( (lappr(:K) < 0) .neqv. word(:K) )
 
             critical
                 if (new_errors .gt. 0) then
