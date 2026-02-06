@@ -1,5 +1,5 @@
 ! SPDX-License-Identifier: GPL-3.0-or-later
-! Copyright (C) 2024  Marco Origlia
+! Copyright (C) 2025  Marco Origlia
 
 !    This program is free software: you can redistribute it and/or modify
 !    it under the terms of the GNU General Public License as published by
@@ -17,9 +17,9 @@ program reverse_reconciliation
     !! author: Marco Origlia
     !! license: GPL-3.0-or-later
     !!
-    !! Perform reverse reconciliation Montecarlo Simulation
+    !! Perform Montecarlo Simulation for reconciliation
     use iso_fortran_env, only: dp => real64, event_type
-    use iso_c_binding, only: c_int, c_funptr, c_funloc
+    use iso_c_binding, only: c_int, c_long, c_funptr, c_funloc
     use io_fortran_lib, only: from_file, to_file
     use stdlib_random, only: stdlib_random_seed => random_seed
     use stdlib_stats_distribution_normal, only: rvs_normal
@@ -64,10 +64,7 @@ program reverse_reconciliation
     ! +-------------+
     ! | Output data |
     ! +-------------+
-    double precision, allocatable, target :: outdata(:,:)
-    double precision, pointer             :: snrdb(:)
-    double precision, pointer             :: ber(:)
-    double precision, pointer             :: fer(:)
+    double precision, allocatable :: snrdb(:)
 
     ! +---------------------+
     ! | Image-specific data |
@@ -78,9 +75,9 @@ program reverse_reconciliation
     ! +----------------------------------+
     ! | Simulation buffers and variables |
     ! +----------------------------------+
-    integer, allocatable :: b_err(:)[:] ! Cumulative bit error count per SNR value
-    integer, allocatable :: f_err(:)[:] ! Cumulative frame error count per SNR value
-    integer, allocatable :: f_cnt(:)[:] ! Total frame count per SNR value
+    integer(c_long), allocatable :: b_err(:)[:] ! Cumulative bit error count per SNR value
+    integer(c_long), allocatable :: f_err(:)[:] ! Cumulative frame error count per SNR value
+    integer(c_long), allocatable :: f_cnt(:)[:] ! Total frame count per SNR value
 
     integer, allocatable :: x_i(:) ! Indexes of generated symbols
     double precision, allocatable :: y(:), lappr(:)
@@ -89,7 +86,7 @@ program reverse_reconciliation
     integer, allocatable :: xhat(:) ! Decided symbol
     logical, allocatable :: word(:), synd(:) ! word received by Bob and it's syndrome
     integer :: new_errors ! Number of errors of the current iteration
-    integer :: K          ! Number of information bit per frame
+    integer(c_long) :: K          ! Number of information bit per frame
     integer :: N_iter     ! Number of iterations at the end of the decoding
 
     double precision :: sigma
@@ -99,9 +96,9 @@ program reverse_reconciliation
     type(noisemapper_type) :: nm
 
     type(bar_object) :: progress_bar
-    type(event_type), allocatable :: snr_done(:)[:]
-    type(event_type), allocatable :: new_data(:)[:]
+    integer, allocatable :: snr_done(:)[:]
     integer :: done_cnt
+    logical :: this_snr_done
 
 
 
@@ -122,9 +119,9 @@ program reverse_reconciliation
 
 
     if (this_image() == 1) then
-        print *, " +-----------------------------------+"
-        print *, " | REVERSE reconciliation simulation |"
-        print *, " +-----------------------------------+"
+        print *, " +--------------------------+"
+        print *, " | Reconciliation simulator |"
+        print *, " +--------------------------+"
     end if
 
     argc = command_argument_count()
@@ -255,27 +252,13 @@ program reverse_reconciliation
     call random_seed(put=[me, seed, time_seed])
 
 
-    ! +----------------------------------------+
-    ! | Allocation of simulation result arrays |
-    ! +----------------------------------------+
-    if (me==1) then
-        allocate(outdata(nsnr, 3))
-        ber => outdata(:, 2)
-        fer => outdata(:, 3)
-        outdata(:,2:) = 0
-    else
-        allocate(outdata(nsnr, 1))
-    end if
-    snrdb => outdata(:, 1)
+
+    allocate(snrdb(nsnr))
     snrdb = [(snr(1) + real(i, dp)*(snr(2)-snr(1))/real(nsnr - 1, dp), i = 0, nsnr-1)]
 
-    allocate(b_err(nsnr)[*])
-    allocate(f_err(nsnr)[*])
-    allocate(f_cnt(nsnr)[*])
-
-    b_err(:) = 0
-    f_err(:) = 0
-    f_cnt(:) = 0
+    allocate(b_err(nsnr)[*], source=0_c_long)
+    allocate(f_err(nsnr)[*], source=0_c_long)
+    allocate(f_cnt(nsnr)[*], source=0_c_long)
 
     critical
         call from_file(file=tanner_file, into=edge_definition, header=tanner_header)
@@ -309,10 +292,7 @@ program reverse_reconciliation
 
     allocate(word(decoder%cnum))
     allocate(synd(decoder%cnum))
-    if (n_im > 4) then
-        allocate(snr_done(nsnr)[*])
-        allocate(new_data(nsnr)[*])
-    end if
+    allocate(snr_done(nsnr)[*], source=0)
 
     nm = noisemapper_create(bps)
     if (encodingNatural) then
@@ -324,10 +304,10 @@ program reverse_reconciliation
         call noisemapper_allocate_reverse_hard(nm)
     end if
 
-    ! +-------------------------------+
-    ! | Display simulation parameters |
-    ! +-------------------------------+
     if (me == 1) then
+        ! +-------------------------------+
+        ! | Display simulation parameters |
+        ! +-------------------------------+
         call decoder%print
         print '("Each frame carries ", i6, " information bits.")', decoder%vnum - decoder%cnum
         print '("Performing ", i3, " iterations.")', max_iter
@@ -346,6 +326,9 @@ program reverse_reconciliation
             print *, "Bob is using maximum a-posteriori probability quantization"
         end if
 
+        ! +--------------------------------------------+
+        ! | Create pid file and build output file name |
+        ! +--------------------------------------------+
         if (alpha == 1d0) then
             call make_directory_and_file_name(output_root, bps, .not.direct_r, isHard, &
                 snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
@@ -357,8 +340,15 @@ program reverse_reconciliation
         end if
         call execute_command_line("mkdir -p " // trim(output_dir))
         io_log = open(trim(output_dir)//"/"//trim(output_name)//".pid", 'w')
-        ! write(io_log,'(A)', advance='no') ""
         close(io_log)
+        io_log = open(trim(output_dir)//"/"//trim(output_name)//".log", 'w')
+        io_csv = open(trim(output_dir)//"/"//trim(output_name)//".csv", 'w')
+        write(io_log, '(A, T16, A, T32, A, T48, A, T64, A, T80, A)') &
+            "SNR [dB]", "F_NUM", "ERR", "BER", "FERR", "FER"
+        write(io_csv, '(A, ",", A, ",", A, ",", A, ",", A, ",", A)') &
+            "SNR", "F_NUM", "ERR", "BER", "FERR", "FER"
+        flush(io_log)
+        flush(io_csv)
     end if
 
     call co_broadcast(output_dir,1)
@@ -370,6 +360,11 @@ program reverse_reconciliation
     critical
         call save_pid
     end critical
+
+    if (me /=1) then
+        io_log = open(trim(output_dir)//"/"//trim(output_name)//".log", '+t')
+        io_csv = open(trim(output_dir)//"/"//trim(output_name)//".csv", '+t')
+    end if
     ! +------------+
     ! | Simulation |
     ! +------------+
@@ -378,47 +373,12 @@ program reverse_reconciliation
             filled_char_string='+', prefix_string='SNR points progress |',&
             suffix_string='| ', add_progress_percent=.true.)
         call progress_bar%start
-
-        if  (n_im > 4) then
-            open(newunit=io_log, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
-                status="replace", action="write")
-            open(newunit=io_csv, file=trim(output_dir) // "/" // trim(output_name) // ".csv", &
-                status="replace", action="write")
-            write(io_log, '(A, T16, A, T32, A, T48, A, T64, A, T80, A)') &
-                "SNR [dB]", "F_NUM", "ERR", "BER", "FERR", "FER"
-            write(io_csv, '(A, ",", A, ",", A, ",", A, ",", A, ",", A)') &
-                "SNR", "F_NUM", "ERR", "BER", "FERR", "FER"
-            flush(io_log)
-            flush(io_csv)
-            do i_snr = 1, nsnr
-                done_cnt = 0
-                new_data_loop: do
-                    ! Consume only one "new_data" event at a time
-                    ! so that every time we also check whether
-                    ! all "snr_done" events have been signalled
-                    ! for the current snr point.
-                    event wait (new_data(i_snr))
-                    call log_data(i_snr, .false.)
-                    call event_query (snr_done(i_snr), done_cnt)
-                    if (done_cnt == n_im - 1) then
-                        call log_data(i_snr, .true.)
-                        exit new_data_loop
-                    end if
-                end do new_data_loop
-                event wait (snr_done(i_snr), until_count=n_im-1)
-                call progress_bar%update(current=real(i_snr, 8)/real(nsnr, 8))
-            end do
-            close(io_log)
-            close(io_csv)
-            stop
-        end if
     end if
+
+    sync all
 
     loop_snr : do i_snr = 1, nsnr
         call noisemapper_update_N0_from_snrdb(nm, snrdb(i_snr))
-        ! if (uniform_th .or. (.not. isHard)) then
-        !     call noisemapper_set_Fy_grids(nm)
-        ! end if
         if (uniform_th) then
             call noisemapper_set_y_thresholds_uniform(nm)
         else
@@ -452,6 +412,8 @@ program reverse_reconciliation
                 lappr(i*bps + 1 : (i+1)*bps) = lappr(1:bps)
             end do
         end if
+
+        this_snr_done = .false.
 
         loop_frame : do i_frame = 1, max_sim
             ! Alice generates random symbols:
@@ -504,101 +466,35 @@ program reverse_reconciliation
                     f_err(i_snr)[1] = f_err(i_snr)[1] + 1
                 end if
                 f_cnt(i_snr)[1]     = f_cnt(i_snr)[1] + 1
+                if (((f_err(i_snr)[1] .ge. min_ferr) .and. &
+                    (f_cnt(i_snr)[1] .ge. min_sim)) .or. (f_cnt(i_snr)[1] .ge. max_sim) &
+                    .or. interrupt_received) then
+                    this_snr_done = .true.
+                    snr_done(i_snr)[1] = snr_done(i_snr)[1] + 1
+                end if
             end critical
 
-
-            if (interrupt_received) then
-                if (n_im>4) then
-                    do i = i_snr, nsnr
-                        event post(new_data(i)[1])
-                        event post(snr_done(i)[1])
-                    end do
-                end if
-                exit loop_snr
-            end if
-
-            if (((f_err(i_snr)[1] .ge. min_ferr) .and. &
-                (f_cnt(i_snr)[1] .ge. min_sim)) .or. (f_cnt(i_snr)[1] .ge. max_sim) ) then
-                if (me==1 .and. n_im < 5) then
-                    call progress_bar%update(current=real(i_snr, 8)/real(nsnr, 8))
-                end if
-                exit loop_frame
-            end if
-
-            ! If we exit, we will have to signal new data only after we signal completion
-            ! so to be sure that when image 1 reads snr_done, no new data is produced
-            ! by the current loop
-            if (n_im > 4) event post(new_data(i_snr)[1])
+            if (me==1) call log_data
+            if (this_snr_done) exit loop_frame
         end do loop_frame
-        if (n_im > 4) then
-            event post(snr_done(i_snr)[1])
-            event post(new_data(i_snr)[1])
+        if (me==1) then
+            do while (snr_done(i_snr)[1] < n_im)
+                call sleep(2)
+            end do
+            call progress_bar%update(current=real(i_snr, dp)/real(nsnr,dp))
+            call log_data
+            write(io_log, '(A)') ''
+            write(io_csv, '(A)') ''
         end if
         if (i_snr .ge. 3) then
-            if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
-                ! Check again after 60 seconds, so that if new errors pop up from other images, we keep helping them
-                call sleep(60)
-                if (all(b_err(i_snr-2 : i_snr)[1] == 0)) then
-                    if (n_im > 4) then
-                        do i = i_snr+1, nsnr
-                            event post(snr_done(i)[1])
-                            event post(new_data(i)[1])
-                        end do
-                    else if (me==1) then
-                        call progress_bar%update(current=1d0)
-                        call progress_bar%destroy
-                    end if
-                    exit loop_snr
-                end if
-            end if
+            if (all(b_err(i_snr-2 : i_snr)[1] == 0)) exit loop_snr
         end if
+        if (interrupt_received) exit loop_snr
     end do loop_snr
 
     if (interrupt_received) print*, me, "Completed after interrupt"
-
-    ! +-----------------------------------------+
-    ! | First Image saves the simulation result |
-    ! +-----------------------------------------+
     sync all
-    if (me == 1) then
-        if (alpha == 1d0) then
-            call make_directory_and_file_name(output_root, bps, .not.direct_r, isHard, &
-                snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
-                output_dir, output_name)
-        else
-            call make_directory_and_file_name(output_root, bps, .not.direct_r, isHard, &
-                snr, nsnr, min_sim, max_sim, max_iter, min_ferr,         &
-                output_dir, output_name, alpha)
-            print *, trim(output_dir)
-            print *, trim(output_name)
-        end if
-        call execute_command_line("mkdir -p " // trim(output_dir))
-        open(newunit=io_log, file=trim(output_dir) // "/" // trim(output_name) // ".log", &
-            status="replace", action="write")
-
-        write(io_log, '(A, T16, A, T32, A, T48, A, T64, A, T80, A)') "SNR [dB]", "F_NUM", "ERR", "BER", "FERR", "FER"
-        do i_snr = 1, nsnr
-            if (b_err(i_snr) == 0) then
-                ber(i_snr) = 0
-                fer(i_snr) = 0
-            else
-                ber(i_snr) = real(b_err(i_snr), dp)/real(f_cnt(i_snr), dp)/real(K, dp)
-                fer(i_snr) = real(f_err(i_snr), dp)/real(f_cnt(i_snr), dp)
-            end if
-
-            write(io_log, '(f12.3, T16, I6, T32, I10, T48, ES10.3E3, T64, I10, T80, ES10.3E3)') &
-                snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
-        end do
-        close(io_log)
-
-        ! call to_file(x=outdata, file=output_file, header=["SNR", "BER", "FER"], fmt="f")
-        if (alpha == 1d0) then
-            call save_data(outdata, output_root, bps, .not.direct_r, isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr)
-        else
-            call save_data(outdata, output_root, bps, .not.direct_r, isHard, snr, nsnr, min_sim, max_sim, max_iter, min_ferr, alpha)
-        end if
-    end if
-
+    if (me==1) call progress_bar%update(current=1d0)
 contains
     subroutine shuffle_word_and_lappr(word, lappr)
         logical, intent(inout) :: word(0:)
@@ -645,30 +541,24 @@ contains
     end subroutine save_pid
 
 
-    subroutine log_data(i_snr, last)
-        integer, intent(in) :: i_snr
-        logical, intent(in) :: last
-
+    subroutine log_data
         character(len=3) :: advance_spec
+        double precision :: ber
+        double precision :: fer
 
-        if (last) then
-            advance_spec = "yes"
+        if (b_err(i_snr)[1] == 0) then
+            ber = 0
+            fer = 0
         else
-            advance_spec = "no"
+            ber = real(b_err(i_snr)[1], dp)/real(f_cnt(i_snr)[1], dp)/real(K, dp)
+            fer = real(f_err(i_snr)[1], dp)/real(f_cnt(i_snr)[1], dp)
         end if
 
-        if (b_err(i_snr) == 0) then
-            ber(i_snr) = 0
-            fer(i_snr) = 0
-        else
-            ber(i_snr) = real(b_err(i_snr), dp)/real(f_cnt(i_snr), dp)/real(K, dp)
-            fer(i_snr) = real(f_err(i_snr), dp)/real(f_cnt(i_snr), dp)
-        end if
+        write(io_log, '(A, f12.3, T16, I6, T32, I10, T48, ES10.4E2, T64, I10, T80, ES10.4E2)', advance='no') &
+            char(13), snrdb(i_snr), f_cnt(i_snr)[1], b_err(i_snr)[1], ber, f_err(i_snr)[1], fer
+        write(io_csv, '(A, f7.3, ",", I0, ",", I0, ",", ES10.4E2, ",", I0, ",", ES10.4E2)', advance='no') &
+            char(13), snrdb(i_snr), f_cnt(i_snr)[1], b_err(i_snr)[1], ber, f_err(i_snr)[1], fer
 
-        write(io_log, '(A, f12.3, T16, I6, T32, I10, T48, ES10.4E2, T64, I10, T80, ES10.4E2)', advance=trim(advance_spec)) &
-            char(13), snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
-        write(io_csv, '(A, f7.3, ",", I0, ",", I0, ",", ES10.4E2, ",", I0, ",", ES10.4E2)', advance=trim(advance_spec)) &
-            char(13), snrdb(i_snr), f_cnt(i_snr), b_err(i_snr), ber(i_snr), f_err(i_snr), fer(i_snr)
         flush(io_log)
         flush(io_csv)
     end subroutine log_data
