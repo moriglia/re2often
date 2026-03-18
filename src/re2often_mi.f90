@@ -476,13 +476,14 @@ contains
     end function f_integrand_soft_direct
 
 
-    real(c_double) function I_direct(snrdb) result(I)
+    real(c_double) function I_direct(snrdb, npts) result(I)
         !! Mutual information of the direct reconciliation scheme
         real(c_double), intent(in) :: snrdb
         !! SNR [dB] at which to calculate the mutual information
+        integer(c_int), intent(in), optional :: npts
 
         real(c_double) :: Abserr
-        integer :: Ier
+        integer :: Ier, npoints
         ! integer :: Neval, Ier, Limit, Lenw, Last
 
         ! integer :: Iwork(100)
@@ -492,7 +493,12 @@ contains
 
         call noisemapper_update_N0_from_snrdb(nm, snrdb)
 
-        I = - hermite(20, f_integrand_GH, Ier)
+        if (present(npts)) then
+           npoints = npts
+        else
+           npoints = 20
+        end if
+        I = - hermite(npoints, f_integrand_GH, Ier)
 
         if (Ier /= 0) then
             print '("Error at ", f10.3, " [dB]: error ", i1)', snrdb, Ier
