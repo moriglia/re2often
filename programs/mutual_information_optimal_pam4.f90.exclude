@@ -20,10 +20,9 @@ program mutual_information_optimal_pam4
     !! Numerically evaluate the Mutual Information of various schemes
     use iso_fortran_env, only: lock_type, dp => real64
     use io_fortran_lib, only: from_file, to_file
-    use re2often_noisemapper
+    use re2often
     use re2often_utils, only: save_data, make_directory_and_file_name
     use forbear, only: bar_object
-    use re2often_mi ! defines a noisemapper_type object
     use quadpack, only: dqags
     implicit none
 
@@ -80,6 +79,8 @@ program mutual_information_optimal_pam4
     type(bar_object) :: progress_bar
 
     type(lock_type) :: lck[*]
+
+    type(noisemapper_type) :: nm
 
 
     ! generic iteration variables

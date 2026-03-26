@@ -34,16 +34,16 @@ name = "mutual-information"
 source-dir = "programs"
 main = "mutual_information.f90"
 
-[[executable]]
-name = "mi-opt-pam4"
-source-dir = "programs"
-main = "mutual_information_optimal_pam4.f90"
+# [[executable]]
+# name = "mi-opt-pam4"
+# source-dir = "programs"
+# main = "mutual_information_optimal_pam4.f90"
 
-[[executable]]
-name = "mi-opt"
-source-dir = "programs"
-main = "mi_opt.F90"
-link = "primaf"
+# [[executable]]
+# name = "mi-opt"
+# source-dir = "programs"
+# main = "mi_opt.F90"
+# link = "primaf"
 
 [[executable]]
 name = "gmi"

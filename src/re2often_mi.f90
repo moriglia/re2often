@@ -1,5 +1,5 @@
 ! SPDX-License-Identifier: GPL-3.0-or-later
-! Copyright (C) 2025  Marco Origlia
+! Copyright (C) 2025-2026  Marco Origlia
 
 !    This program is free software: you can redistribute it and/or modify
 !    it under the terms of the GNU General Public License as published by
@@ -13,200 +13,201 @@
 
 !    You should have received a copy of the GNU General Public License
 !    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-module re2often_mi
+submodule (re2often) re2often_mi
     !! author: Marco Origlia
     !! license: GPL-3.0-or-later
     !!
     !! Mutual information functions
     use, intrinsic :: iso_c_binding
-    use re2often_noisemapper
+    use re2often
     use external_hermite
     use quadpack, only: dqags
     use stdlib_stats_distribution_normal, only: pdf_normal
     implicit none
 
-    private
-    public :: I_soft_reverse_equidistant_th, I_soft_reverse_uniform_output_th, I_soft_reverse
-    public :: I_hard_reverse_equidistant_th, I_hard_reverse_uniform_output_th
-    public :: I_direct
-    public :: H_Xhat, H_Xhat_cond_X
-    public :: log0
-    public :: f_soft_reverse, f_n_xhat_cond_x
+    ! private
+    ! public :: I_soft_reverse_equidistant_th, I_soft_reverse_uniform_output_th, I_soft_reverse
+    ! public :: I_hard_reverse_equidistant_th, I_hard_reverse_uniform_output_th
+    ! public :: I_direct
+    ! public :: H_Xhat, H_Xhat_cond_X
+    ! public :: log0
+    ! public :: f_soft_reverse, f_n_xhat_cond_x
 
-    type(noisemapper_type) :: nm
+    ! type(noisemapper_type) :: nm
 
-    public :: nm
+    ! public :: nm
 
     real(c_double), parameter :: sq2 = sqrt(2d0)
-
-    interface
-        module function I_soft_reverse_bitwise(snrdb, thresholds, uf) result (I)
-            real(c_double), intent(in) :: snrdb
-            !! SNR [dB] at which to calculate the mutual information
-            real(c_double), intent(in), optional :: thresholds(1:nm%M-1)
-            !! Decision Thresholds, overrides `uf`
-            logical, intent(in), optional :: uf
-            !! Flag for uniform output thresholds
-            real(c_double) :: I
-        end function I_soft_reverse_bitwise
-        module function I_s_BN_Xhat() result(I)
-            real(c_double) :: I
-        end function I_s_BN_Xhat
-    end interface
-
-    interface
-        module function I_direct_bitwise(snrdb) result(I)
-            real(c_double), intent(in) :: snrdb
-            !! SNR [dB] at which to calculate the mutual information
-            real(c_double) :: I
-        end function I_direct_bitwise
-    end interface
-
-    interface
-        module function I_hard_reverse_bitwise(snrdb, thresholds, uf) result (I)
-            real(c_double), intent(in) :: snrdb
-            !! SNR [dB] at which to calculate the mutual information
-            real(c_double), intent(in), optional :: thresholds(1:nm%M-1)
-            !! Decision Thresholds, overrides `uf`
-            logical, intent(in), optional :: uf
-            !! Flag for uniform output thresholds
-            real(c_double) :: I
-        end function I_hard_reverse_bitwise
-    end interface
-
-    public :: I_soft_reverse_bitwise, I_direct_bitwise, I_hard_reverse_bitwise
-    public :: I_s_BN_Xhat
-
-    ! +---------------------------+
-    ! | GMI functions and members |
-    ! +---------------------------+
-
-    abstract interface
-        function q_hard(a_i, a_j) result(q)
-            !! Compute the decoding metric using only hard information
-            import
-            integer(c_int), intent(in) :: a_i
-            !! Alphabet index of the symbol ( either \(X\) or \(\hat{X}\)
-            integer(c_int), intent(in) :: a_j
-            !! Alphabet index of the other variable
-            real(c_double) :: q
-        end function q_hard
-        function q_soft_direct(x, y) result(q)
-            !! compute the decoding metric using soft information for the direct channel
-            import
-            integer(c_int), intent(in) :: x
-            !! Alphabet index of the transmitted symbol
-            real(c_double), intent(in) :: y
-            !! Received channel output
-            real(c_double) :: q
-        end function q_soft_direct
-        function q_hard_hard_soft(x, xhat, n) result (q)
-            import
-            integer(c_int), intent(in) :: x
-            integer(c_int), intent(in) :: xhat
-            real(c_double), intent(in) :: n
-            real(c_double) :: q
-        end function q_hard_hard_soft
-    end interface
-
-    interface
-        module function I_s_map_hard_reverse(q, s) result(I_s)
-            !! GMI for MAP criterion with hard information only, reverse direction
-            procedure(q_hard) :: q
-            !! Function that computes the metric
-            real(c_double), intent(in), optional :: s
-            !! Positive parameter s of the GMI
-            real(c_double) :: I_s
-            !! GMI(s)
-        end function I_s_map_hard_reverse
-        module function q_map_hard_product(xhat, x) result (q)
-            integer(c_int), intent(in) :: xhat
-            integer(c_int), intent(in) :: x
-            real(c_double) :: q
-        end function q_map_hard_product
-        module function q_map_hard_opt(xhat, x) result(q)
-            integer(c_int), intent(in) :: xhat
-            integer(c_int), intent(in) :: x
-            real(c_double) :: q
-        end function q_map_hard_opt
-    end interface
-
-    interface
-        module function I_s_map_soft_direct(q, s) result(I_s)
-            !! GMI for MAP criterion with hard information only, reverse direction
-            procedure(q_soft_direct) :: q
-            !! Function that computes the metric
-            real(c_double), intent(in), optional :: s
-            !! Positive parameter s of the GMI
-            real(c_double) :: I_s
-            !! GMI(s)
-        end function I_s_map_soft_direct
-
-        module function q_map_soft_direct_prod(x, y) result (q)
-            integer(c_int), intent(in) :: x
-            real(c_double), intent(in) :: y
-            real(c_double) :: q
-        end function q_map_soft_direct_prod
-    end interface
-
-
-    interface
-        module function I_s_ml_hard_direct(q, s) result (I_s)
-            procedure(q_hard) :: q
-            real(c_double), intent(in), optional :: s
-            real(c_double) :: I_s
-        end function I_s_ml_hard_direct
-
-        module function q_ml_hard_direct_prod(x, xhat) result(q)
-            integer(c_int), intent(in) :: x
-            integer(c_int), intent(in) :: xhat
-            real(c_double) :: q
-        end function q_ml_hard_direct_prod
-    end interface
-
-    interface
-         module function I_s_map_soft_reverse(q, s, useDenominator) result(I_s)
-             !! GMI-MAP
-             procedure(q_hard_hard_soft)          :: q
-             real(c_double), intent(in), optional :: s
-             logical       , intent(in), optional :: useDenominator
-             real(c_double)                       :: I_s
-         end function I_s_map_soft_reverse
-         module function q_map_soft_reverse_prod(x, xhat, n) result(q)
-             integer(c_int), intent(in) :: x
-             integer(c_int), intent(in) :: xhat
-             real(c_double), intent(in) :: n
-             real(c_double)             :: q
-         end function q_map_soft_reverse_prod
-     end interface
-
-     interface
-         module function I_s_ml_soft_reverse(nmm, s) result(I_s)
-             !! Compute the GMI in the Maximum-Likelyhood version
-             !! Note that for this function I changed the computation approach
-             !! Now the metric function is implicit and the noisemapper is explicit
-             type(noisemapper_type),   intent(in) :: nmm
-             real(c_double), optional, intent(in) :: s
-             real(c_double)                       :: I_s
-         end function I_s_ml_soft_reverse
-     end interface
-
+    real(c_double), parameter :: ln2 = log(2d0)
     real(c_double), parameter :: sqrtPi = sqrt(acos(-1d0))
-    real(c_double) :: sqrtN0
+    real(c_double), parameter :: sqrtPiLn2 = sqrtPi * ln2
+
+    ! interface
+    !     module function I_soft_reverse_bitwise(snrdb, thresholds, uf) result (I)
+    !         real(c_double), intent(in) :: snrdb
+    !         !! SNR [dB] at which to calculate the mutual information
+    !         real(c_double), intent(in), optional :: thresholds(1:nm%M-1)
+    !         !! Decision Thresholds, overrides `uf`
+    !         logical, intent(in), optional :: uf
+    !         !! Flag for uniform output thresholds
+    !         real(c_double) :: I
+    !     end function I_soft_reverse_bitwise
+    !     module function I_s_BN_Xhat() result(I)
+    !         real(c_double) :: I
+    !     end function I_s_BN_Xhat
+    ! end interface
+
+    ! interface
+    !     module function I_direct_bitwise(snrdb) result(I)
+    !         real(c_double), intent(in) :: snrdb
+    !         !! SNR [dB] at which to calculate the mutual information
+    !         real(c_double) :: I
+    !     end function I_direct_bitwise
+    ! end interface
+
+    ! interface
+    !     module function I_hard_reverse_bitwise(snrdb, thresholds, uf) result (I)
+    !         real(c_double), intent(in) :: snrdb
+    !         !! SNR [dB] at which to calculate the mutual information
+    !         real(c_double), intent(in), optional :: thresholds(1:nm%M-1)
+    !         !! Decision Thresholds, overrides `uf`
+    !         logical, intent(in), optional :: uf
+    !         !! Flag for uniform output thresholds
+    !         real(c_double) :: I
+    !     end function I_hard_reverse_bitwise
+    ! end interface
+
+    ! ! public :: I_soft_reverse_bitwise, I_direct_bitwise, I_hard_reverse_bitwise
+    ! ! public :: I_s_BN_Xhat
+
+    ! ! +---------------------------+
+    ! ! | GMI functions and members |
+    ! ! +---------------------------+
+
+    ! abstract interface
+    !     function q_hard(a_i, a_j) result(q)
+    !         !! Compute the decoding metric using only hard information
+    !         import
+    !         integer(c_int), intent(in) :: a_i
+    !         !! Alphabet index of the symbol ( either \(X\) or \(\hat{X}\)
+    !         integer(c_int), intent(in) :: a_j
+    !         !! Alphabet index of the other variable
+    !         real(c_double) :: q
+    !     end function q_hard
+    !     function q_soft_direct(x, y) result(q)
+    !         !! compute the decoding metric using soft information for the direct channel
+    !         import
+    !         integer(c_int), intent(in) :: x
+    !         !! Alphabet index of the transmitted symbol
+    !         real(c_double), intent(in) :: y
+    !         !! Received channel output
+    !         real(c_double) :: q
+    !     end function q_soft_direct
+    !     function q_hard_hard_soft(x, xhat, n) result (q)
+    !         import
+    !         integer(c_int), intent(in) :: x
+    !         integer(c_int), intent(in) :: xhat
+    !         real(c_double), intent(in) :: n
+    !         real(c_double) :: q
+    !     end function q_hard_hard_soft
+    ! end interface
+
+    ! interface
+    !     module function I_s_map_hard_reverse(q, s) result(I_s)
+    !         !! GMI for MAP criterion with hard information only, reverse direction
+    !         procedure(q_hard) :: q
+    !         !! Function that computes the metric
+    !         real(c_double), intent(in), optional :: s
+    !         !! Positive parameter s of the GMI
+    !         real(c_double) :: I_s
+    !         !! GMI(s)
+    !     end function I_s_map_hard_reverse
+    !     module function q_map_hard_product(xhat, x) result (q)
+    !         integer(c_int), intent(in) :: xhat
+    !         integer(c_int), intent(in) :: x
+    !         real(c_double) :: q
+    !     end function q_map_hard_product
+    !     module function q_map_hard_opt(xhat, x) result(q)
+    !         integer(c_int), intent(in) :: xhat
+    !         integer(c_int), intent(in) :: x
+    !         real(c_double) :: q
+    !     end function q_map_hard_opt
+    ! end interface
+
+    ! interface
+    !     module function I_s_map_soft_direct(q, s) result(I_s)
+    !         !! GMI for MAP criterion with hard information only, reverse direction
+    !         procedure(q_soft_direct) :: q
+    !         !! Function that computes the metric
+    !         real(c_double), intent(in), optional :: s
+    !         !! Positive parameter s of the GMI
+    !         real(c_double) :: I_s
+    !         !! GMI(s)
+    !     end function I_s_map_soft_direct
+
+    !     module function q_map_soft_direct_prod(x, y) result (q)
+    !         integer(c_int), intent(in) :: x
+    !         real(c_double), intent(in) :: y
+    !         real(c_double) :: q
+    !     end function q_map_soft_direct_prod
+    ! end interface
+
+
+    ! interface
+    !     module function I_s_ml_hard_direct(q, s) result (I_s)
+    !         procedure(q_hard) :: q
+    !         real(c_double), intent(in), optional :: s
+    !         real(c_double) :: I_s
+    !     end function I_s_ml_hard_direct
+
+    !     module function q_ml_hard_direct_prod(x, xhat) result(q)
+    !         integer(c_int), intent(in) :: x
+    !         integer(c_int), intent(in) :: xhat
+    !         real(c_double) :: q
+    !     end function q_ml_hard_direct_prod
+    ! end interface
+
+    ! interface
+    !      module function I_s_map_soft_reverse(q, s, useDenominator) result(I_s)
+    !          !! GMI-MAP
+    !          procedure(q_hard_hard_soft)          :: q
+    !          real(c_double), intent(in), optional :: s
+    !          logical       , intent(in), optional :: useDenominator
+    !          real(c_double)                       :: I_s
+    !      end function I_s_map_soft_reverse
+    !      module function q_map_soft_reverse_prod(x, xhat, n) result(q)
+    !          integer(c_int), intent(in) :: x
+    !          integer(c_int), intent(in) :: xhat
+    !          real(c_double), intent(in) :: n
+    !          real(c_double)             :: q
+    !      end function q_map_soft_reverse_prod
+    !  end interface
+
+    !  interface
+    !      module function I_s_ml_soft_reverse(nmm, s) result(I_s)
+    !          !! Compute the GMI in the Maximum-Likelyhood version
+    !          !! Note that for this function I changed the computation approach
+    !          !! Now the metric function is implicit and the noisemapper is explicit
+    !          type(noisemapper_type),   intent(in) :: nmm
+    !          real(c_double), optional, intent(in) :: s
+    !          real(c_double)                       :: I_s
+    !      end function I_s_ml_soft_reverse
+    !  end interface
+
     integer :: dqags_Limit = 100
 
-    public :: sqrtN0, dqags_Limit
-    public :: I_s_map_hard_reverse, I_s_map_soft_direct
-    public :: q_map_hard_product, q_map_hard_opt
-    public :: q_map_soft_direct_prod
+    ! public :: sqrtN0, dqags_Limit
+    ! public :: I_s_map_hard_reverse, I_s_map_soft_direct
+    ! public :: q_map_hard_product, q_map_hard_opt
+    ! public :: q_map_soft_direct_prod
 
-    public :: I_s_ml_hard_direct
-    public :: q_ml_hard_direct_prod
+    ! public :: I_s_ml_hard_direct
+    ! public :: q_ml_hard_direct_prod
 
-    public :: I_s_map_soft_reverse
-    public :: q_map_soft_reverse_prod
+    ! public :: I_s_map_soft_reverse
+    ! public :: q_map_soft_reverse_prod
 
-    public :: I_s_ml_soft_reverse
+    ! public :: I_s_ml_soft_reverse
 
 contains
 
@@ -226,11 +227,22 @@ contains
         end if
     end function log0
 
+
+    real(c_double) module function H_Xhat(nm) result(H)
+        !! Entropy of the output symbols
+        type(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+
+        H = - sum(nm%delta_Fy * log0(nm%delta_Fy))/ln2
+    end function H_Xhat
+
     ! +-----------------------------+
     ! | Soft Reverse Reconciliation |
     ! +-----------------------------+
 
-    real(c_double) impure elemental function f_n_xhat_cond_x(n, xhat, x) result(pdf)
+    real(c_double) impure elemental function f_n_xhat_cond_x(nm, n, xhat, x) result(pdf)
+        !! Initialized noisemapper object
+        type(noisemapper_type), intent(in) :: nm
         !! PDF of \(N, \hat{X}|X\)
         real(c_double), intent(in) :: n
         !! Soft metric
@@ -253,47 +265,60 @@ contains
         pdf = nm%delta_Fy(xhat) / pdf
     end function f_n_xhat_cond_x
 
-
-    real(c_double) function f_soft_reverse(n) result(f)
-        !! Argument of the finite integral
-        real(c_double), intent(in) :: n
-        !! Soft metric
-
-        integer :: j, i
-        real(c_double), allocatable :: f_n_xhat_cond_x_array(:,:)
-        real(c_double) :: log2_f_n_cond_x
-
-        allocate(f_n_xhat_cond_x_array(0:nm%M-1, 0:nm%M-1))
-        ! 1st index : X
-        ! 2nd index : Xhat
-
-        do j = 0, nm%M-1
-            f_n_xhat_cond_x_array(j, :) = f_n_xhat_cond_x(n, [(i, i=0, nm%M-1)], j)
-        end do
-
-        f = 0
-
-        do j = 0, nm%M-1 ! X index
-            log2_f_n_cond_x = log0(sum(f_n_xhat_cond_x_array(j, :)))
-            do i = 0, nm%M-1 ! Xhat index
-                f = f + nm%probabilities(j) * f_n_xhat_cond_x_array(j, i) * &
-                    (log0(f_n_xhat_cond_x_array(j, i)) - log2_f_n_cond_x)
-            end do
-        end do
-        f = f/log(2d0)
-    end function f_soft_reverse
-
-    real(c_double) function H_Xhat(nm) result(H)
-        !! Entropy of the output symbols
-        type(noisemapper_type), intent(in) :: nm
-        !! Noise mapper
-
-        H = - sum(nm%delta_Fy * log0(nm%delta_Fy))/log(2d0)
-    end function H_Xhat
-
-
-    real(c_double) function I_soft_reverse_equidistant_th(snrdb) result(I)
+    real(c_double) function I_soft_reverse(nm) result(I)
         !! Mutual information of the soft reverse reconciliation scheme
+        type(noisemapper_type), intent(in) :: nm
+        !! Initialized noisemapper object
+
+        real(c_double) :: Abserr
+        integer :: Neval, Ier, Limit, Lenw, Last
+
+        integer :: Iwork(100)
+        real(c_double) :: Work(400)
+        Limit = 100
+        Lenw = 400
+
+        call dqags(f_soft_reverse, 0d0, 1d0, 1d-12, 1d-6, &
+            I, Abserr, Neval, Ier, &
+            Limit, Lenw, Last, Iwork, Work)
+
+        I = I + H_Xhat(nm)
+    contains
+        real(c_double) function f_soft_reverse(n) result(f)
+            !! Argument of the finite integral
+            real(c_double), intent(in) :: n
+            !! Soft metric
+
+            integer :: j, i
+            real(c_double), allocatable :: f_n_xhat_cond_x_array(:,:)
+            real(c_double) :: log2_f_n_cond_x
+
+            allocate(f_n_xhat_cond_x_array(0:nm%M-1, 0:nm%M-1))
+            ! 1st index : X
+            ! 2nd index : Xhat
+
+            do j = 0, nm%M-1
+                f_n_xhat_cond_x_array(j, :) = f_n_xhat_cond_x(nm, n, [(i, i=0, nm%M-1)], j)
+            end do
+
+            f = 0
+
+            do j = 0, nm%M-1 ! X index
+                log2_f_n_cond_x = log0(sum(f_n_xhat_cond_x_array(j, :)))
+                do i = 0, nm%M-1 ! Xhat index
+                    f = f + nm%probabilities(j) * f_n_xhat_cond_x_array(j, i) * &
+                        (log0(f_n_xhat_cond_x_array(j, i)) - log2_f_n_cond_x)
+                end do
+            end do
+            f = f/ln2
+        end function f_soft_reverse
+    end function I_soft_reverse
+
+
+    real(c_double) function I_soft_reverse_equidistant_th(nm, snrdb) result(I)
+        !! Mutual information of the soft reverse reconciliation scheme
+        type(noisemapper_type), intent(inout) :: nm
+        !! Initialized noisemapper object
         real(c_double), intent(in) :: snrdb
         !! SNR [dB] at which to calculate the mutual information
 
@@ -309,20 +334,14 @@ contains
         call noisemapper_set_y_thresholds(nm)
         call noisemapper_set_Fy_grids(nm)
 
-        call dqags(f_soft_reverse, 0d0, 1d0, 1d-12, 1d-6, &
-            I, Abserr, Neval, Ier, &
-            Limit, Lenw, Last, Iwork, Work)
-
-        if (Ier /= 0) then
-            print '("Error at ", f10.3, " [dB]: error ", i1)', snrdb, Ier
-        end if
-
-        I = I + H_Xhat(nm)
+        I = I_soft_reverse(nm)
     end function I_soft_reverse_equidistant_th
 
 
-    real(c_double) function I_soft_reverse_uniform_output_th(snrdb) result(I)
+    real(c_double) function I_soft_reverse_uniform_output_th(nm, snrdb) result(I)
         !! Mutual information of the soft reverse reconciliation scheme
+        type(noisemapper_type), intent(inout) :: nm
+        !! Initialized noisemapper object
         real(c_double), intent(in) :: snrdb
         !! SNR [dB] at which to calculate the mutual information
 
@@ -338,37 +357,8 @@ contains
         call noisemapper_set_y_thresholds_uniform(nm)
         call noisemapper_set_Fy_grids(nm)
 
-        call dqags(f_soft_reverse, 0d0, 1d0, 1d-12, 1d-6, &
-            I, Abserr, Neval, Ier, &
-            Limit, Lenw, Last, Iwork, Work)
-
-        if (Ier /= 0) then
-            print '("Error at ", f10.3, " [dB]: error ", i1)', snrdb, Ier
-        end if
-
-        I = I + H_Xhat(nm)
+        I = I_soft_reverse(nm)
     end function I_soft_reverse_uniform_output_th
-
-
-    real(c_double) function I_soft_reverse(nm) result(I)
-        !! Mutual information of the soft reverse reconciliation scheme
-        type(noisemapper_type), intent(in) :: nm
-        !! SNR [dB] at which to calculate the mutual information
-
-        real(c_double) :: Abserr
-        integer :: Neval, Ier, Limit, Lenw, Last
-
-        integer :: Iwork(100)
-        real(c_double) :: Work(400)
-        Limit = 100
-        Lenw = 400
-
-        call dqags(f_soft_reverse, 0d0, 1d0, 1d-12, 1d-6, &
-            I, Abserr, Neval, Ier, &
-            Limit, Lenw, Last, Iwork, Work)
-
-        I = I + H_Xhat(nm)
-    end function I_soft_reverse
 
     ! +-----------------------------+
     ! | Hard reverse reconciliation |
@@ -388,12 +378,33 @@ contains
                     log0(nm%fwd_probabilities(j, i))
             end do
         end do
-        H = - H/log(2d0)
+        H = - H/ln2
     end function H_Xhat_cond_X
 
 
-    real(c_double) function I_hard_reverse_equidistant_th(snrdb) result (I)
+    real(c_double) function I_hard_reverse(nm) result (I)
         !! Mutual information of the discrete Input and Output channel
+        type(noisemapper_type), intent(inout) :: nm
+        !! Initialized noisemapper object
+
+        integer :: ii, jj
+
+        I = 0
+        do jj = 0, nm%M-1
+            do ii = 0, nm%M-1
+                I = I + nm%fwd_probabilities(ii, jj) * nm%probabilities(ii) * &
+                    (log0(nm%fwd_probabilities(ii, jj)) - log0(nm%delta_Fy(jj)))
+            end do
+        end do
+        I = I/ln2
+    end function I_hard_reverse
+
+
+
+    real(c_double) function I_hard_reverse_equidistant_th(nm, snrdb) result (I)
+        !! Mutual information of the discrete Input and Output channel
+        type(noisemapper_type), intent(inout) :: nm
+        !! Initialized noisemapper object
         real(c_double), intent(in) :: snrdb
         !! SNR [dB] at which to evaluate the Mutual information
 
@@ -403,21 +414,14 @@ contains
         call noisemapper_set_y_thresholds(nm)
         call noisemapper_update_hard_reverse_tables(nm)
 
-        ! I = H_Xhat(nm) - H_Xhat_cond_X(nm)
-        I = 0
-
-        do jj = 0, nm%M-1
-            do ii = 0, nm%M-1
-                I = I + nm%fwd_probabilities(ii, jj) * nm%probabilities(ii) * &
-                    (log0(nm%fwd_probabilities(ii, jj)) - log0(nm%delta_Fy(jj)))
-            end do
-        end do
-        I = I/log(2d0)
+        I = I_hard_reverse(nm)
     end function I_hard_reverse_equidistant_th
 
 
-    real(c_double) function I_hard_reverse_uniform_output_th(snrdb) result (I)
+    real(c_double) function I_hard_reverse_uniform_output_th(nm, snrdb) result (I)
         !! Mutual information of the discrete Input and Output channel
+        type(noisemapper_type), intent(inout) :: nm
+        !! Initialized noisemapper object
         real(c_double), intent(in) :: snrdb
         !! SNR [dB] at which to evaluate the Mutual information
 
@@ -427,56 +431,16 @@ contains
         call noisemapper_set_y_thresholds_uniform(nm)
         call noisemapper_update_hard_reverse_tables(nm)
 
-        ! I = H_Xhat(nm) - H_Xhat_cond_X(nm)
-        I = 0
-
-        do jj = 0, nm%M-1
-            do ii = 0, nm%M-1
-                I = I + nm%fwd_probabilities(ii, jj) * nm%probabilities(ii) * &
-                    (log0(nm%fwd_probabilities(ii, jj)) - log0(nm%delta_Fy(jj)))
-            end do
-        end do
-        I = I/log(2d0)
+        I = I_hard_reverse(nm)
     end function I_hard_reverse_uniform_output_th
 
 
     ! +----------------------------+
     ! ! Soft direct reconciliation |
     ! +----------------------------+
-
-    real(c_double) function f_integrand_GH(x) result(f)
-        !! Function to be integrated with the Gauss-Hermite quadrature rule
-        real(c_double), intent(in) :: x
-        !! Scaled Y
-
-        integer :: j, k
-        real(c_double) :: log_arg, a_j, a_k
-        f = 0
-
-        do j = 0, nm%M-1
-            log_arg = 0
-            a_j = nm%constellation(j)
-            do k = 0, nm%M-1
-                a_k = nm%constellation(k)
-                log_arg = log_arg + nm%probabilities(k) * &
-                    exp((a_k-a_j)*(a_j-a_k + 2*x*sq2*nm%sigma)/nm%N0)
-            end do
-            f = f + nm%probabilities(j) * log0(log_arg)
-        end do
-        f = f / (sqrt(acos(-1d0)) * log(2d0))
-    end function f_integrand_GH
-
-
-    real(c_double) function f_integrand_soft_direct(x) result(f)
-        !! Integrand function for soft direct reconciliation
-        real(c_double), intent(in) :: x
-        !!
-
-        f = - exp(-x**2) * f_integrand_GH(x)
-    end function f_integrand_soft_direct
-
-
-    real(c_double) function I_direct(snrdb, npts) result(I)
+    real(c_double) function I_direct(nm, snrdb, npts) result(I)
+        !! Initialized noisemapper object
+        type(noisemapper_type), intent(inout) :: nm
         !! Mutual information of the direct reconciliation scheme
         real(c_double), intent(in) :: snrdb
         !! SNR [dB] at which to calculate the mutual information
@@ -484,12 +448,6 @@ contains
 
         real(c_double) :: Abserr
         integer :: Ier, npoints
-        ! integer :: Neval, Ier, Limit, Lenw, Last
-
-        ! integer :: Iwork(100)
-        ! real(c_double) :: Work(400)
-        ! Limit = 100
-        ! Lenw = 400
 
         call noisemapper_update_N0_from_snrdb(nm, snrdb)
 
@@ -503,5 +461,27 @@ contains
         if (Ier /= 0) then
             print '("Error at ", f10.3, " [dB]: error ", i1)', snrdb, Ier
         end if
+    contains
+        real(c_double) function f_integrand_GH(x) result(f)
+            !! Function to be integrated with the Gauss-Hermite quadrature rule
+            real(c_double), intent(in) :: x
+            !! Scaled Y
+
+            integer :: j, k
+            real(c_double) :: log_arg, a_j, a_k
+            f = 0
+
+            do j = 0, nm%M-1
+                log_arg = 0
+                a_j = nm%constellation(j)
+                do k = 0, nm%M-1
+                    a_k = nm%constellation(k)
+                    log_arg = log_arg + nm%probabilities(k) * &
+                        exp((a_k-a_j)*(a_j-a_k + 2*x*sq2*nm%sigma)/nm%N0)
+                end do
+                f = f + nm%probabilities(j) * log0(log_arg)
+            end do
+            f = f / (sqrtPi * ln2)
+        end function f_integrand_GH
     end function I_direct
-end module re2often_mi
+end submodule re2often_mi

@@ -27,10 +27,9 @@ program mi_opt
         stdout => output_unit, &
         event_type
     use io_fortran_lib, only: from_file, to_file
-    use re2often_noisemapper
+    use re2often
     use re2often_utils, only: save_data, make_directory_and_file_name
     ! use forbear, only: bar_object
-    use re2often_mi ! defines a noisemapper_type object
     use lincoa_mod
     use quadpack, only: dqags
     use flap ! CLI parser: command_line_interface
@@ -107,6 +106,8 @@ program mi_opt
     integer :: me, n_im
 
     type(lock_type) :: lck[*]
+
+    type(noisemapper_type) :: nm
 
 
     ! generic iteration variables

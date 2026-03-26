@@ -26,7 +26,7 @@ program reverse_reconciliation
     use stdlib_stats_distribution_uniform, only: rvs_uniform
     use stdlib_io
     ! use re2often_noise_mapper, only: TNoiseMapper
-    use re2often_noisemapper
+    use re2often
     use re2often_utils, only: save_data, make_directory_and_file_name
     use ldpc_decoder, only: TDecoder
     use forbear, only: bar_object

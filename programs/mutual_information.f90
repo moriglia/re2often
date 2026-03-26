@@ -23,10 +23,9 @@ program mutual_information
     ! use stdlib_random, only: stdlib_random_seed => random_seed
     ! use stdlib_stats_distribution_normal, only: rvs_normal
     ! use re2often_noise_mapper, only: TNoiseMapper
-    use re2often_noisemapper
+    use re2often
     use re2often_utils, only: save_data, make_directory_and_file_name
     use forbear, only: bar_object
-    use re2often_mi ! defines a noisemapper_type object
     implicit none
 
     ! +---------------------+
@@ -49,8 +48,8 @@ program mutual_information
     logical :: isEntropy      ! Whether to evaluate the raw key entropy instead (implies reverse+hard)
     logical :: editConfig     ! Whether to perform the calculation for a specific monotonicity configuration
     integer :: monoConfig     ! Selected monotonicity configuration
-    logical :: bWise          ! Bitwise mutual information?
-    logical :: encodingNatural ! Implies bWise
+    ! logical :: bWise          ! Bitwise mutual information?
+    ! logical :: encodingNatural ! Implies bWise
 
     ! +-------------+
     ! | Output data |
@@ -70,6 +69,8 @@ program mutual_information
     type(bar_object) :: progress_bar
 
     type(lock_type) :: lck[*]
+
+    type(noisemapper_type) :: nm
 
 
     ! generic iteration variables
@@ -100,8 +101,8 @@ program mutual_information
     uniform_th = .false.
     isEntropy = .false.
     editConfig = .false.
-    bWise = .false.
-    encodingNatural = .false.
+    ! bWise = .false.
+    ! encodingNatural = .false.
 
     ii = 1
     do while(ii <= argc)
@@ -137,13 +138,13 @@ program mutual_information
             editConfig = .true.
             read(argv(ii + 1), *) monoConfig
             ii = ii + 2
-        elseif(argv(ii) == "-b") then
-            bWise = .true.
-            ii = ii + 1
-        elseif (argv(ii) == "--natural") then
-            encodingNatural = .true.
-            bWise = .true.
-            ii = ii + 1
+        ! elseif(argv(ii) == "-b") then
+        !     bWise = .true.
+        !     ii = ii + 1
+        ! elseif (argv(ii) == "--natural") then
+            ! encodingNatural = .true.
+            ! bWise = .true.
+            ! ii = ii + 1
         else
             print *, "Unrecognized argument: ", argv(ii)
             stop
@@ -183,9 +184,9 @@ program mutual_information
     ! I            => outdata(:, 3)[1]
 
     nm = noisemapper_create(bps)
-    if (encodingNatural) then
-        call noisemapper_set_encoding_natural(nm)
-    end if
+    ! if (encodingNatural) then
+    !     call noisemapper_set_encoding_natural(nm)
+    ! end if
     if (isReverse .and. (.not. isHard)) then
         call noisemapper_set_monotonicity(nm)
         ! Allocates the monotonicity configuration and sets the default
@@ -225,29 +226,31 @@ program mutual_information
             outdata(i_snr, 3)[1] = H_Xhat(nm)
         elseif (isReverse) then
             if (isHard) then
-                if (bWise) then
-                    outdata(i_snr, 3)[1] = I_hard_reverse_bitwise(outdata(i_snr, 1)[1])
-                elseif (uniform_th) then
-                    outdata(i_snr, 3)[1] = I_hard_reverse_uniform_output_th(outdata(i_snr, 1)[1])
+                ! if (bWise) then
+                !     outdata(i_snr, 3)[1] = I_hard_reverse_bitwise(outdata(i_snr, 1)[1])
+                ! else
+                if (uniform_th) then
+                    outdata(i_snr, 3)[1] = I_hard_reverse_uniform_output_th(nm, outdata(i_snr, 1)[1])
                 else
-                    outdata(i_snr, 3)[1] = I_hard_reverse_equidistant_th(outdata(i_snr, 1)[1])
+                    outdata(i_snr, 3)[1] = I_hard_reverse_equidistant_th(nm, outdata(i_snr, 1)[1])
                 end if
             else
-                if (bWise) then
-                    outdata(i_snr, 3)[1] = &
-                        I_soft_reverse_bitwise(outdata(i_snr,1)[1], uf=uniform_th)
-                elseif (uniform_th) then
-                    outdata(i_snr, 3)[1] = I_soft_reverse_uniform_output_th(outdata(i_snr, 1)[1])
+                ! if (bWise) then
+                !     outdata(i_snr, 3)[1] = &
+                !         I_soft_reverse_bitwise(outdata(i_snr,1)[1], uf=uniform_th)
+                ! else
+                if (uniform_th) then
+                    outdata(i_snr, 3)[1] = I_soft_reverse_uniform_output_th(nm, outdata(i_snr, 1)[1])
                 else
-                    outdata(i_snr, 3)[1] = I_soft_reverse_equidistant_th(outdata(i_snr, 1)[1])
+                    outdata(i_snr, 3)[1] = I_soft_reverse_equidistant_th(nm, outdata(i_snr, 1)[1])
                 end if
             end if
         else
-            if (bWise) then
-                outdata(i_snr, 3)[1] = I_direct_bitwise(outdata(i_snr, 1)[1])
-            else
-                outdata(i_snr, 3)[1] = I_direct(outdata(i_snr, 1)[1])
-            end if
+            ! if (bWise) then
+            !     outdata(i_snr, 3)[1] = I_direct_bitwise(outdata(i_snr, 1)[1])
+            ! else
+            outdata(i_snr, 3)[1] = I_direct(nm, outdata(i_snr, 1)[1])
+            ! end if
         end if
     end do loop_snr
 

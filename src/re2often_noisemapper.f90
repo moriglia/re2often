@@ -1,5 +1,5 @@
 ! SPDX-License-Identifier: GPL-3.0-or-later
-! Copyright (C) 2025  Marco Origlia
+! Copyright (C) 2025-2026  Marco Origlia
 
 !    This program is free software: you can redistribute it and/or modify
 !    it under the terms of the GNU General Public License as published by
@@ -13,7 +13,7 @@
 
 !    You should have received a copy of the GNU General Public License
 !    along with this program.  If not, see <https://www.gnu.org/licenses/>.
-module re2often_noisemapper
+submodule (re2often) re2often_noisemapper
     !! author: Marco Origlia
     !! license: GPL-3.0-or-later
     !!
@@ -24,114 +24,7 @@ module re2often_noisemapper
     use stdlib_stats_distribution_normal, only: cdf_normal
     implicit none
 
-    type :: noisemapper_type
-        !! Descriptor for the alphabet and the noise channel
-        integer(c_int) :: bps
-        !! Bit per symbol
-        integer(c_int) :: M
-        !! order of modulation (number of constellation symbols)
-        real(c_double), allocatable :: constellation(:)
-        !! constellation points
-        real(c_double), allocatable :: probabilities(:)
-        !! probabilities for each constellation point
-        logical(c_bool), allocatable :: s_to_b(:,:)
-        !! c_bool pointer to symbol to bit map
-        real(c_double) :: E_s
-        !! Expected symbol energy (per quadrature, only dealing with PAM)
-        real(c_double) :: N0
-        !! Expected noise variance (on both quadratures)
-        real(c_double) :: sigma
-        !! standard deviation of noise (only one quadrature)
-
-        ! +-----------------------------+
-        ! | Reverse reconciliation data |
-        ! +-----------------------------+
-        real(c_double), allocatable :: y_thresholds(:)
-        !! Decision thresholds. It ranges from `1` to `M-1`, with
-        !! `1` corresponding to the threshold between symbol `0` and
-        !! symbol `1`
-        real(c_double), allocatable :: Fy_thresholds(:)
-        !! Cumulative Density Function of the channel output at the
-        !! thresholds. It ranges from `0` to `M`, with `Fy_thresholds(0) = 0`,
-        !! `Fy_thresholds(M) = 1`, else `Fy_thresholds(i)` is the CDF
-        !! evaluated at `y_thresholds(i)`
-        real(c_double), allocatable :: delta_Fy(:)
-        !! Probability that the channel output lays in the
-        !! decision region of each symbol
-
-        ! +----------------------------------+
-        ! | Hard reverse reconciliation data |
-        ! +----------------------------------+
-        real(c_double), allocatable :: fwd_probabilities(:,:)
-        !! Forward transition probabilities (likelihoods):
-        !! Location (i, j) contains \(P(\hat{X}=a_j | X=a_i)\)
-        real(c_double), allocatable :: reverse_hard_lappr_table(:,:)
-        !! table of LAPPRs of the received bits given a transmitted symbol.
-        !! Location (i, k) contains the LAPPR(k) given \(X=a_i\).
-        !! `i` ranges in `(0, M)`, `k` ranges in `(0, bps)`
-
-        ! real(c_double), allocatable :: bwd_probabilities(:,:)
-        ! !! Backward transition probabilities (a posteriori probabilities):
-        ! !! Location (i, j) contains \(P(X=a_i | \hat{X}=a_j)\)
-        ! !! Mind the inversion of indexes with respect to `fwd_probabilities`
-
-        ! +---------------------------------------+
-        ! | Reverse Reconciliation SOFTENING data |
-        ! +---------------------------------------+
-        logical(c_bool), allocatable :: monotonicity_configuration(:)
-        !! Monotonicity configuration `(0:M-1)`: `.false.` means increasing,
-        !! `.true.` means decreasing.
-        real(c_double), allocatable :: Fy_grid(:)
-        !! grid of CDF values taken at equally spaced intervals.
-        !! Note that it is 1-based
-        real(c_double) :: base_y_grid
-        !! First element of the y grid
-        real(c_double) :: y_grid_step
-        !! step of the y grid
-    end type noisemapper_type
-
-    ! +--------------------------------------+
-    ! | Interfaces for DIRECT reconciliation |
-    ! +--------------------------------------+
-    interface noisemapper_y_to_lappr
-        module procedure noisemapper_y_to_lappr_single
-        module procedure noisemapper_y_to_lappr_array
-    end interface noisemapper_y_to_lappr
-
-    interface noisemapper_random_symbol
-        module procedure noisemapper_random_symbol_single
-        module procedure noisemapper_random_symbol_array
-    end interface noisemapper_random_symbol
-
-    ! +---------------------------------------+
-    ! | Interfaces for REVERSE reconciliation |
-    ! +---------------------------------------+
-    interface noisemapper_decide_symbol
-        module procedure noisemapper_decide_symbol_single
-        module procedure noisemapper_decide_symbol_array
-    end interface noisemapper_decide_symbol
-
-    ! +--------------------------------------------+
-    ! | Interfaces for SOFT REVERSE reconciliation |
-    ! +--------------------------------------------+
-    interface noisemapper_generate_soft_metric
-        module procedure noisemapper_generate_soft_metric_single
-        module procedure noisemapper_generate_soft_metric_array
-    end interface noisemapper_generate_soft_metric
-
-    interface noisemapper_soft_reverse_lappr
-        module procedure noisemapper_soft_reverse_lappr_single
-        module procedure noisemapper_soft_reverse_lappr_array
-    end interface noisemapper_soft_reverse_lappr
-
-    interface noisemapper_set_monotonicity
-        module procedure noisemapper_set_monotonicity_array
-        module procedure noisemapper_set_monotonicity_from_integer
-    end interface noisemapper_set_monotonicity
-
 contains
-
-
     module subroutine noisemapper_deallocate(nm)
         !! Destructor for noise mapper
         type(noisemapper_type), intent(inout) :: nm
@@ -1006,4 +899,4 @@ contains
         end do
         pdf = nm%delta_Fy(xhat) / pdf
     end function f_xhat_n_cond_x
-end module re2often_noisemapper
+end submodule re2often_noisemapper

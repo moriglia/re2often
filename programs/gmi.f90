@@ -23,10 +23,9 @@ program gmi
     ! use stdlib_random, only: stdlib_random_seed => random_seed
     ! use stdlib_stats_distribution_normal, only: rvs_normal
     ! use re2often_noise_mapper, only: TNoiseMapper
-    use re2often_noisemapper
+    use re2often
     use re2often_utils, only: save_data, make_directory_and_file_name
     use forbear, only: bar_object
-    use re2often_mi ! defines a noisemapper_type object
     use flap ! CLI parser: command_line_interface
     use lincoa_mod
     implicit none
@@ -78,6 +77,8 @@ program gmi
     type(bar_object) :: progress_bar
 
     type(lock_type) :: lck[*]
+
+    type(noisemapper_type) :: nm
 
 
     ! generic iteration variables
@@ -284,7 +285,7 @@ program gmi
         unlock(lck[1])
 
         call noisemapper_update_N0_from_snrdb(nm, outdata(i_snr, 1)[1])
-        sqrtN0 = sqrt(nm%N0)
+        ! sqrtN0 = sqrt(nm%N0)
 
         if (editOutProbs) then
             thresholds(M_half) = 0d0
@@ -303,9 +304,9 @@ program gmi
             if (isHard) then
                 call noisemapper_update_hard_reverse_tables(nm)
                 if (useML) then
-                    outdata(i_snr, 3)[1] = I_s_ml_hard_direct(q_ml_hard_direct_prod)
+                    outdata(i_snr, 3)[1] = I_s_ml_hard_direct(nm)
                 else
-                    outdata(i_snr, 3)[1] = I_s_map_hard_reverse(q_map_hard_product)
+                    outdata(i_snr, 3)[1] = I_s_map_hard_reverse(nm)
                 end if
             else
                 call noisemapper_set_Fy_grids(nm)
@@ -325,7 +326,7 @@ program gmi
                         outdata(i_snr, 3)[1] = -I_neg
                         outdata(i_snr, 4)[1] = s(1)
                     else
-                        outdata(i_snr, 3)[1] = I_s_map_soft_reverse(q_map_soft_reverse_prod)
+                        outdata(i_snr, 3)[1] = I_s_map_soft_reverse(nm)
                     end if
                 end if
             end if
@@ -336,7 +337,7 @@ program gmi
                 end if
                 stop
             end if
-            outdata(i_snr, 3)[1] = I_s_map_soft_direct(q_map_soft_direct_prod)
+            outdata(i_snr, 3)[1] = I_s_map_soft_direct(nm)
         end if
     end do loop_snr
 
@@ -396,7 +397,7 @@ contains
         double precision, intent(in)  :: s(:)
         double precision, intent(out) :: I_neg
 
-        I_neg = -I_s_map_soft_reverse(q_map_soft_reverse_prod, s(1))
+        I_neg = -I_s_map_soft_reverse(nm, s(1))
     end subroutine gmi_map_reverse_soft_s
 
     subroutine gmi_ml_reverse_soft_s(s, I_neg)
