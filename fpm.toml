@@ -8,68 +8,6 @@ copyright="Copyright (C) 2024 - 2025, Marco Origlia"
 auto-executables = false
 auto-examples = false
 auto-tests = false
-external-modules = ["lincoa_mod"]
-link = ["primaf", "c"]
-
-[preprocess]
-[preprocess.cpp]
-
-[[executable]]
-name = "direct-reconciliation"
-source-dir = "programs"
-main = "direct_reconciliation.f90"
-
-[[executable]]
-name = "reverse-reconciliation"
-source-dir = "programs"
-main = "reverse_reconciliation.f90"
-
-[[executable]]
-name = "reconciliation"
-source-dir = "programs"
-main = "reconciliation.f90"
-
-[[executable]]
-name = "mutual-information"
-source-dir = "programs"
-main = "mutual_information.f90"
-
-# [[executable]]
-# name = "mi-opt-pam4"
-# source-dir = "programs"
-# main = "mutual_information_optimal_pam4.f90"
-
-# [[executable]]
-# name = "mi-opt"
-# source-dir = "programs"
-# main = "mi_opt.F90"
-# link = "primaf"
-
-[[executable]]
-name = "gmi"
-source-dir = "programs"
-main = "gmi.f90"
-
-[[executable]]
-name = "bpsk"
-source-dir = "programs"
-main = "bpsk.f90"
-
-[[executable]]
-name = "mi-biawgn"
-source-dir = "programs"
-main = "mi_biawgn.f90"
-
-[[executable]]
-name = "cfg-list"
-source-dir = "programs"
-main = "configurations_list.f90"
-
-[executable.dependencies]
-forbear = { git="https://github.com/szaghi/forbear.git", branch="master" }
-fldpc = { git="https://codeberg.org/moriglia/fldpc.git", tag="v1.3.4" }
-stdlib = "*"
-FLAP = { git="https://github.com/szaghi/FLAP.git", tag="v1.2.5" }
 
 [library]
 source-dir="src"
