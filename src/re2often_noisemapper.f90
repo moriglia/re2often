@@ -27,7 +27,7 @@ submodule (re2often) re2often_noisemapper
 contains
     module subroutine noisemapper_deallocate(nm)
         !! Destructor for noise mapper
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
 
         if (allocated(nm%constellation)) deallocate(nm%constellation)
@@ -38,7 +38,7 @@ contains
 
     module subroutine noisemapper_set_symbol_probabilities(nm, probabilities)
         !! Allocate and set probability vector for imput constellation symbols
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
         real(c_double), intent(in), optional :: probabilities(0:nm%M-1)
         !! Input probabilities
@@ -69,7 +69,7 @@ contains
 
         integer :: i
 
-        call noisemapper_deallocate(nm)
+        call nm%deallocate()
 
         nm%bps = bps
         nm%M   = ishft(1, bps)
@@ -78,16 +78,16 @@ contains
         nm%constellation = [(real(1-nm%M, c_double) + real(2*i, c_double), &
             i = 0, nm%M-1) ]
 
-        call noisemapper_set_symbol_probabilities(nm)
+        call nm%set_symbol_probabilities()
 
         allocate(nm%s_to_b(0:nm%M-1 , 0:nm%bps-1))
-        call noisemapper_set_encoding_gray(nm)
+        call nm%set_encoding_gray()
     end function noisemapper_create
 
 
     module subroutine noisemapper_set_encoding_gray(nm)
         !! Set Gray encoding
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
 
         integer :: i, k
@@ -101,7 +101,7 @@ contains
 
     module subroutine noisemapper_set_encoding_natural(nm)
         !! Set Gray encoding
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
 
         integer :: i, k
@@ -116,7 +116,7 @@ contains
     module subroutine noisemapper_set_encoding_custom(nm, labels)
         !! Set custom encoding labels
         !! @warning: no check on labels being a complete permutation of (0:M-1)
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
         integer, intent(in) :: labels(0:nm%M-1)
         !! Encoding Labels
@@ -132,7 +132,7 @@ contains
 
     module subroutine noisemapper_update_N0_from_snrdb(nm, snrdb)
         !! Update N0 based on the value of the SNR
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
         real(c_double), intent(in) :: snrdb
         !! SNR in dB
@@ -144,7 +144,7 @@ contains
 
     module subroutine noisemapper_y_to_lappr_single(nm, y, lappr)
         !! calculate lappr from channel output sample for direct reconciliation
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         real(c_double), intent(in) :: y
         !! AWGN channel output sample
@@ -183,7 +183,7 @@ contains
 
     module subroutine noisemapper_y_to_lappr_array(nm, y, lappr)
         !! calculate lappr from set of channel output samples for direct reconciliation
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         real(c_double), intent(in) :: y(0:)
         !! AWGN channel samples
@@ -193,14 +193,14 @@ contains
         integer :: j
 
         do j = 0, size(y)-1
-            call noisemapper_y_to_lappr_single(nm, y(j), lappr(j*nm%bps : (j+1)*nm%bps - 1))
+            call nm%y_to_lappr(y(j), lappr(j*nm%bps : (j+1)*nm%bps - 1))
         end do
     end subroutine noisemapper_y_to_lappr_array
 
 
     module subroutine noisemapper_random_symbol_single(nm, x_i)
         !! Generate a random symbol
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         integer(c_int), intent(out) :: x_i
         !! Random symbol of the constellation (index in 0:M-1)
@@ -223,21 +223,21 @@ contains
 
     module subroutine noisemapper_random_symbol_array(nm, x_i)
         !! Generate random symbols
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         integer(c_int), intent(out) :: x_i(:)
         !! Random symbols of the constellation (index in 0:M-1)
 
         integer :: j
         do j = 1, size(x_i)
-            call noisemapper_random_symbol_single(nm, x_i(j))
+            call nm%random_symbol(x_i(j))
         end do
     end subroutine noisemapper_random_symbol_array
 
 
     module function noisemapper_symbol_index_to_value(nm, x_i) result (x)
         !! Convert constellation index to point
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         integer(c_int), intent(in) :: x_i(:)
         !! Set of constellation indexes
@@ -254,7 +254,7 @@ contains
 
     module function noisemapper_symbol_to_word(nm, x_i) result (word)
         !! Convert a set of symbol indexes to a word
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         integer(c_int), intent(in) :: x_i(0:)
         !! Set of indexes
@@ -274,7 +274,7 @@ contains
 
     module subroutine noisemapper_deallocate_reverse_common(nm)
         !! Deallocation of common arrays for reverse reconciliation
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! noise mapper
 
         if (allocated(nm%y_thresholds) ) deallocate(nm%y_thresholds)
@@ -285,10 +285,10 @@ contains
 
     module subroutine noisemapper_allocate_reverse_common(nm)
         !! Allocate the common reverse reconciliation buffers
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
 
-        call noisemapper_deallocate_reverse_common(nm)
+        call nm%deallocate_reverse_common()
 
         allocate(nm%y_thresholds(1:nm%M-1))
         allocate(nm%Fy_thresholds(0:nm%M))
@@ -298,7 +298,7 @@ contains
 
     module subroutine noisemapper_set_y_thresholds(nm, thresholds)
         !! Set the decision thresholds
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
         real(c_double), intent(in), optional :: thresholds(1:nm%M-1)
         !! y thresholds. If not present, the thresholds are the points
@@ -308,7 +308,7 @@ contains
         integer :: i
 
 
-        call noisemapper_allocate_reverse_common(nm)
+        call nm%allocate_reverse_common()
 
         ! Set the thresholds
         if (.not. present(thresholds)) then
@@ -335,7 +335,7 @@ contains
     module function noisemapper_decide_symbol_single(nm, y) result(x_i)
         !! Take a decision for the received channel output based
         !! on the thresholds
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         real(c_double), intent(in) :: y
         !! Channel output sample
@@ -350,7 +350,7 @@ contains
     module function noisemapper_decide_symbol_array(nm, y) result(x_i)
         !! Take a decision for the set of received channel outputs
         !! based on thresholds
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noisemapper
         real(c_double), intent(in) :: y(:)
         !! Set of input samples
@@ -370,7 +370,7 @@ contains
 
     module subroutine noisemapper_deallocate_reverse_hard(nm)
         !! Deallocate transition probability table and lappr table
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
 
         if (allocated(nm%fwd_probabilities)) deallocate(nm%fwd_probabilities)
@@ -380,12 +380,12 @@ contains
 
     module subroutine noisemapper_allocate_reverse_hard(nm, skipLapprTable)
         !! Allocate transition probability table and lappr table
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
         logical, intent(in), optional :: skipLapprTable
         !! Do not allocate LAPPR table
 
-        call noisemapper_deallocate_reverse_hard(nm)
+        call nm%deallocate_reverse_hard()
 
         allocate(nm%fwd_probabilities(0:nm%M-1, 0:nm%M-1))
         if (present(skipLapprTable)) then
@@ -399,7 +399,7 @@ contains
 
     module subroutine noisemapper_update_hard_reverse_tables(nm, skipLapprTable)
         !! Update hard reverse reconciliation tables
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
         logical, intent(in), optional :: skipLapprTable
         !! Do not compute LAPPR table
@@ -408,7 +408,7 @@ contains
         real(c_double) :: denominator(0:nm%M-1, 0:nm%bps-1)
 
         if (present(skipLapprTable)) then
-            call noisemapper_allocate_reverse_hard(nm, skipLapprTable)
+            call nm%allocate_reverse_hard(skipLapprTable)
         end if
 
         do i = 0, nm%M - 1
@@ -459,7 +459,7 @@ contains
 
     module subroutine noisemapper_convert_symbol_to_hard_lappr(nm, x_i, lappr)
         !! Get LAPPR for each symbol from the tables
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         integer(c_int), intent(in) :: x_i(0:)
         !! Transmitted symbols
@@ -479,7 +479,7 @@ contains
     ! +---------------------------------------------+
     elemental module function noisemapper_Fy(nm, y) result(Fy)
         !! Evaluate the CDF of the output at the given point
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         real(c_double), intent(in) :: y
         !! Channel output sample
@@ -492,7 +492,7 @@ contains
 
     module subroutine noisemapper_deallocate_reverse_soft(nm)
         !! Deallocate data used for soft reverse reconciliation
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
 
         if (allocated(nm%monotonicity_configuration)) deallocate(nm%monotonicity_configuration)
@@ -502,9 +502,9 @@ contains
 
     module subroutine noisemapper_set_monotonicity_array(nm, config)
         !! Set monotonicity configuration
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
-        logical(c_bool), optional, intent(in) :: config(0:nm%M-1)
+        logical(c_bool), intent(in) :: config(0:nm%M-1)
         !! Configuration
 
         if (allocated(nm%monotonicity_configuration)) then
@@ -515,18 +515,31 @@ contains
         if (.not. allocated(nm%monotonicity_configuration)) then
             allocate(nm%monotonicity_configuration(0:nm%M-1))
         end if
-        if (present(config)) then
-            nm%monotonicity_configuration = config
-        else
-            nm%monotonicity_configuration(0::2) = .false.
-            nm%monotonicity_configuration(1::2) = .true.
-        end if
+        nm%monotonicity_configuration = config
     end subroutine noisemapper_set_monotonicity_array
+
+
+    module subroutine noisemapper_set_monotonicity_default(nm)
+        !! Set default alternating monotonicity configuration
+        class(noisemapper_type), intent(inout) :: nm
+        !! Noise mapper
+
+        if (allocated(nm%monotonicity_configuration)) then
+            if (size(nm%monotonicity_configuration) /= nm%M) then
+                deallocate(nm%monotonicity_configuration)
+            end if
+        end if
+        if (.not. allocated(nm%monotonicity_configuration)) then
+            allocate(nm%monotonicity_configuration(0:nm%M-1))
+        end if
+        nm%monotonicity_configuration(0::2) = .false.
+        nm%monotonicity_configuration(1::2) = .true.
+    end subroutine noisemapper_set_monotonicity_default
 
 
     module subroutine noisemapper_set_monotonicity_from_integer(nm, config)
         !! Set monotonicity configuration from index
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noisemapper
         integer(c_int), intent(in) :: config
         !! Configuration number
@@ -547,7 +560,7 @@ contains
     module subroutine noisemapper_generate_soft_metric_single(nm, y, n, xhat)
         !! Generate soft metric from a single channel output sample
         !! and give the decided symbol, too.
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         real(c_double), intent(in) :: y
         !! Channel output sample
@@ -556,9 +569,9 @@ contains
         integer(c_int), intent(out) :: xhat
         !! decided symbol
 
-        xhat = noisemapper_decide_symbol_single(nm, y)
+        xhat = nm%decide_symbol(y)
 
-        n = (noisemapper_Fy(nm, y)- nm%Fy_thresholds(xhat))/nm%delta_Fy(xhat)
+        n = (nm%Fy(y)- nm%Fy_thresholds(xhat))/nm%delta_Fy(xhat)
         if (nm%monotonicity_configuration(xhat)) then
             n = 1d0 - n
         end if
@@ -567,7 +580,7 @@ contains
 
     module subroutine noisemapper_generate_soft_metric_array(nm, y, n, xhat)
         !! Generate soft metric from a set of channel output samples
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         real(c_double), intent(in) :: y(:)
         !! Channel output sample
@@ -579,14 +592,14 @@ contains
         integer :: i
 
         do i = 1, size(y)
-            call noisemapper_generate_soft_metric_single(nm, y(i), n(i), xhat(i))
+            call nm%generate_soft_metric(y(i), n(i), xhat(i))
         end do
     end subroutine noisemapper_generate_soft_metric_array
 
 
     module subroutine noisemapper_set_Fy_grids(nm, th)
         !! Setup the grid for the inverse of the CDF
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
         real(c_double), intent(in), optional :: th
         !! threshold for the PDF minimum value.
@@ -614,14 +627,14 @@ contains
         end if
         allocate(nm%Fy_grid(n_points))
 
-        nm%Fy_grid = noisemapper_Fy(nm, &
+        nm%Fy_grid = nm%Fy(&
             [(nm%base_y_grid + i*nm%y_grid_step, i=1, n_points)])
     end subroutine noisemapper_set_Fy_grids
 
 
     module function noisemapper_invert_soft_metric(nm, n, x_i) result(y)
         !! generate all tentative channel output samples from the received soft metric
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! noise mapper
         real(c_double), intent(in) :: n
         !! Soft metric
@@ -647,7 +660,7 @@ contains
 
     module function noisemapper_invert_soft_metric_search(nm, n, x_i, res) result(y)
         !! generate all tentative channel output samples from the received soft metric
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! noise mapper
         real(c_double), intent(in) :: n
         !! Soft metric
@@ -677,9 +690,9 @@ contains
 
 
         if ((idx == 0) .or. (idx == size(nm%Fy_grid))) then
-            y = noisemapper_inverse_Fy_search(nm, Fy, res=resolution)
+            y = nm%invert_Fy(Fy, res=resolution)
         else
-            y = noisemapper_inverse_Fy_search(nm, Fy, res=resolution, &
+            y = nm%invert_Fy(Fy, res=resolution, &
                 ybounds=(nm%base_y_grid + (idx + [0, 1])*nm%y_grid_step))
         end if
     end function noisemapper_invert_soft_metric_search
@@ -687,7 +700,7 @@ contains
 
     module subroutine noisemapper_soft_reverse_lappr_single(nm, x_i, n, lappr, res)
         !! Calculate the LAPPR from the transmitted symbol and the soft metric
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         integer(c_int), intent(in) :: x_i
         !! transmitted symbol alphabet index
@@ -711,9 +724,9 @@ contains
 
         do i = 0, nm%M-1
             if (present(res)) then
-                twoy = 2*noisemapper_invert_soft_metric_search(nm, n, i, res)
+                twoy = 2*nm%invert_soft_metric_search(n, i, res)
             else
-                twoy = 2*noisemapper_invert_soft_metric(nm, n, i)
+                twoy = 2*nm%invert_soft_metric(n, i)
             end if
 
             addendum = 0
@@ -746,7 +759,7 @@ contains
 
     module subroutine noisemapper_soft_reverse_lappr_array(nm, x_i, n, lappr, res)
         !! Calculate the LAPPR from the transmitted symbols and the soft metrics arrays
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         integer(c_int), intent(in) :: x_i(0:)
         !! transmitted symbol alphabet index
@@ -761,11 +774,11 @@ contains
 
         if (present(res)) then
             do i = 0, size(x_i)-1
-                call noisemapper_soft_reverse_lappr_single(nm, x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1), res)
+                call nm%soft_reverse_lappr(x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1), res)
             end do
         else
             do i = 0, size(x_i)-1
-                call noisemapper_soft_reverse_lappr_single(nm, x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1))
+                call nm%soft_reverse_lappr(x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1))
             end do
         end if
     end subroutine noisemapper_soft_reverse_lappr_array
@@ -777,7 +790,7 @@ contains
     module function noisemapper_inverse_Fy_search(nm, Fy, res, ybounds) result (y)
         !! Find the `y` value whose CDF is `Fy`, within a certain `res`-olution
         !! on the CDF
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         real(c_double), intent(in) :: Fy
         !! CDF value to be inverted
@@ -811,41 +824,41 @@ contains
             y_l = minval(ybounds)
             y_h = maxval(ybounds)
 
-            Fy_l = noisemapper_Fy(nm, y_l)
-            Fy_h = noisemapper_Fy(nm, y_h)
+            Fy_l = nm%Fy(y_l)
+            Fy_h = nm%Fy(y_h)
             if ((Fy .lt. Fy_l) .or. (Fy .gt. Fy_h)) then
                 go to 50
             end if
             go to 100 ! find_y
         end if
 
-50      Fy_l = noisemapper_Fy(nm, 0d0)
+50      Fy_l = nm%Fy(0d0)
         if (Fy_l .gt. Fy) then
             y_h = 0
             y_l = -1
             Fy_h = Fy_l
-            Fy_l = noisemapper_Fy(nm, y_l)
+            Fy_l = nm%Fy(y_l)
             do while (Fy_l .gt. Fy)
                 y_h = y_l
                 y_l = 2*y_l
                 Fy_h = Fy_l
-                Fy_l = noisemapper_Fy(nm, y_l)
+                Fy_l = nm%Fy(y_l)
             end do
         else
             y_l = 0
             y_h = 1
-            Fy_h = noisemapper_Fy(nm, y_h)
+            Fy_h = nm%Fy(y_h)
             do while (Fy_h .lt. Fy)
                 y_l = y_h
                 y_h = 2*y_h
                 Fy_l = Fy_h
-                Fy_h = noisemapper_Fy(nm, y_h)
+                Fy_h = nm%Fy(y_h)
             end do
         end if
 
 100     find_y: do while (.true.)
             y = y_l + (Fy-Fy_l)*(y_h-y_l)/(Fy_h - Fy_l) ! linear interpolation
-            Fy_next = noisemapper_Fy(nm, y)
+            Fy_next = nm%Fy(y)
             if (abs(Fy-Fy_next) .lt. resolution) then
                 return
             end if
@@ -860,24 +873,24 @@ contains
     end function noisemapper_inverse_Fy_search
 
 
-
     module subroutine noisemapper_set_y_thresholds_uniform(nm)
         !! Set thresholds with uniform decision probabilities
-        type(noisemapper_type), intent(inout) :: nm
+        class(noisemapper_type), intent(inout) :: nm
         !! Noise mapper
 
         integer :: i
         real(c_double) :: thresholds(1:nm%M-1)
 
         do i = 1, nm%M-1
-            thresholds(i) = noisemapper_inverse_Fy_search(nm, real(i, c_double)/real(nm%M, c_double))
+            thresholds(i) = nm%invert_Fy(real(i, c_double)/real(nm%M, c_double))
         end do
-        call noisemapper_set_y_thresholds(nm, thresholds)
+        call nm%set_y_thresholds(thresholds)
     end subroutine noisemapper_set_y_thresholds_uniform
+
 
     real(c_double) impure elemental module function f_xhat_n_cond_x(nm, n, xhat, x) result(pdf)
         !! PDF of \(N, \hat{X}|X\)
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Noise mapper
         real(c_double), intent(in) :: n
         !! Soft metric
@@ -892,7 +905,7 @@ contains
         pdf = 0
 
         a_j = nm%constellation(x)
-        two_y_i = 2*noisemapper_invert_soft_metric_search(nm, n, xhat)
+        two_y_i = 2*nm%invert_soft_metric_search(n, xhat)
         do k = 0, nm%M-1
             pdf = pdf + nm%probabilities(k) * &
                 exp((nm%constellation(k) - a_j)*(two_y_i - nm%constellation(k) - a_j)/nm%N0)

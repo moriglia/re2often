@@ -113,7 +113,7 @@ contains
 
     module function I_s_map_hard_reverse(nm, s) result(I_s)
         !! GMI for MAP criterion with hard information only, reverse direction
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Initialized noisemapper object
         real(c_double), intent(in), optional :: s
         !! Positive parameter s of the GMI
@@ -170,7 +170,7 @@ contains
     ! +-----------------+
     module function I_s_map_soft_direct(nm, s) result(I_s)
         !! GMI for MAP criterion with hard information only, reverse direction
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         !! Initialized noisemapper object
         real(c_double), intent(in), optional :: s
         !! Positive parameter s of the GMI
@@ -286,7 +286,7 @@ contains
     ! | ML hard direct |
     ! +----------------+
     module function I_s_ml_hard_direct(nm, s) result (I_s)
-        type(noisemapper_type), intent(in) :: nm
+        class(noisemapper_type), intent(in) :: nm
         real(c_double), intent(in), optional :: s
         real(c_double) :: I_s
 
@@ -353,7 +353,7 @@ contains
     ! +------------------+
     module function I_s_map_soft_reverse(nm, s, useDenominator) result(I_s)
         !! GMI-MAP
-        type(noisemapper_type), intent(in)   :: nm
+        class(noisemapper_type), intent(in)   :: nm
         real(c_double), intent(in), optional :: s
         logical       , intent(in), optional :: useDenominator
         real(c_double)                       :: I_s
@@ -422,7 +422,7 @@ contains
 
             if (gmi_soft_reverse_useDenominator) then
                 do xhat_var = 0, nm%M-1
-                    f_N_given_X = f_N_given_X + f_n_xhat_cond_x(nm, n, xhat_var, x)
+                    f_N_given_X = f_N_given_X + nm%f_n_xhat_cond_x(n, xhat_var, x)
                 end do
             end if
 
@@ -430,7 +430,7 @@ contains
                 tmp = 0
                 do xhat_var = 0, nm%M-1
                     if (nm%s_to_b(xhat, l) .eqv. nm%s_to_b(xhat_var, l)) then
-                        tmp = tmp + f_n_xhat_cond_x(nm, n, xhat_var, x)
+                        tmp = tmp + nm%f_n_xhat_cond_x(n, xhat_var, x)
                     end if
                 end do
                 q = q * tmp
@@ -453,7 +453,7 @@ contains
             do x = 0, nm%M-1
                 tmp = 0
                 do xhat = 0, nm%M-1
-                    tmp = tmp + f_n_xhat_cond_x(nm, n, xhat, x) &
+                    tmp = tmp + nm%f_n_xhat_cond_x(n, xhat, x) &
                         * log0(q_map_soft_reverse_prod(x, xhat, n))
                 end do
                 f = f + nm%probabilities(x) * tmp
@@ -472,7 +472,7 @@ contains
             do x = 0, nm%M-1
                 tmp = 0
                 do xhat = 0, nm%M-1
-                    tmp = tmp + f_n_xhat_cond_x(nm, n, xhat, x)
+                    tmp = tmp + nm%f_n_xhat_cond_x(n, xhat, x)
                 end do
                 f = f + tmp * nm%probabilities(x) * q_map_soft_reverse_prod(x, xtilde, n)**gmi_s
             end do
@@ -484,7 +484,7 @@ contains
         !! Compute the GMI in the Maximum-Likelyhood version
         !! Note that for this function I changed the computation approach
         !! Now the metric function is implicit and the noisemapper is explicit
-        type(noisemapper_type),   intent(in) :: nm
+        class(noisemapper_type),   intent(in) :: nm
         real(c_double), optional, intent(in) :: s
         real(c_double)                       :: I_s
 
@@ -524,7 +524,7 @@ contains
                 denom = 0
                 do xhat_var = 0, nm%M-1
                     if (nm%s_to_b(xhat_var, l) .eqv. nm%s_to_b(xhat, l)) then
-                        num   = num   + f_n_xhat_cond_x(nm, n, xhat_var, x)
+                        num   = num   + nm%f_n_xhat_cond_x(n, xhat_var, x)
                         denom = denom + nm%delta_Fy(xhat_var)
                     end if
                 end do
@@ -547,7 +547,7 @@ contains
 
                 do xhat = 0, nm%M-1
                     q = qfunc(xhat, x, n)
-                    w = f_n_xhat_cond_x(nm, n, xhat, x)
+                    w = nm%f_n_xhat_cond_x(n, xhat, x)
 
                     f_n_cond_x = f_n_cond_x + w
                     f_tmp      = f_tmp      + w*log0(q)
