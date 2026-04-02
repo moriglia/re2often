@@ -259,18 +259,14 @@ contains
     ! +----------------------------+
     ! ! Soft direct reconciliation |
     ! +----------------------------+
-    real(c_double) function I_direct(nm, snrdb, npts) result(I)
+    real(c_double) function I_direct(nm, npts) result(I)
         !! Initialized noisemapper object
         class(noisemapper_type), intent(inout) :: nm
         !! Mutual information of the direct reconciliation scheme
-        real(c_double), intent(in) :: snrdb
-        !! SNR [dB] at which to calculate the mutual information
         integer(c_int), intent(in), optional :: npts
 
         real(c_double) :: Abserr
         integer :: Ier, npoints
-
-        call nm%update_N0_from_snrdb(snrdb)
 
         if (present(npts)) then
            npoints = npts
@@ -280,7 +276,7 @@ contains
         I = - hermite(npoints, f_integrand_GH, Ier)
 
         if (Ier /= 0) then
-            print '("Error at ", f10.3, " [dB]: error ", i1)', snrdb, Ier
+            print '("Error in hermite(): ", i1)', Ier
         end if
     contains
         real(c_double) function f_integrand_GH(x) result(f)

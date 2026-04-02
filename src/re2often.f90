@@ -576,12 +576,10 @@ module re2often
             real(c_double), intent(in) :: snrdb
             !! SNR [dB] at which to evaluate the Mutual information
         end function I_hard_reverse_equidistant_th
-        real(c_double) module function I_direct(nm, snrdb, npts) result(I)
+        real(c_double) module function I_direct(nm, npts) result(I)
             !! Initialized noisemapper object
             class(noisemapper_type), intent(inout) :: nm
             !! Mutual information of the direct reconciliation scheme
-            real(c_double), intent(in) :: snrdb
-            !! SNR [dB] at which to calculate the mutual information
             integer(c_int), intent(in), optional :: npts
         end function I_direct
         real(c_double) module function I_soft_reverse(nm) result(I)
