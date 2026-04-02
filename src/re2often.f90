@@ -86,6 +86,7 @@ module re2often
         real(c_double) :: y_grid_step
         !! step of the y grid
     contains
+        final :: noisemapper_finalize
         procedure, pass :: deallocate => noisemapper_deallocate
         !! Deallocate basic arrays
         procedure, pass :: set_symbol_probabilities => noisemapper_set_symbol_probabilities
@@ -144,6 +145,8 @@ module re2often
         ! +----------------------------------------------+
         ! | Reverse reconciliation with soft information |
         ! +----------------------------------------------+
+        procedure, pass :: deallocate_reverse_soft => noisemapper_deallocate_soft_reverse
+        !! Deallocate monotonicity configuration and Fy grid
         procedure, pass :: generate_soft_metric => noisemapper_generate_soft_metric_single, &
             noisemapper_generate_soft_metric_array
         !! Use the channel output (Bob's side) to generate the soft metric.
@@ -205,6 +208,11 @@ module re2often
     ! | Creation of the noisemapper object |
     ! +------------------------------------+
     interface
+        module subroutine noisemapper_finalize(nm)
+            !! Wrapper for the deallocate function
+            type(noisemapper_type) :: nm
+            !! Noisemapper
+        end subroutine noisemapper_finalize
         module subroutine noisemapper_deallocate(nm)
             !! Destructor for noise mapper
             class(noisemapper_type), intent(inout) :: nm
@@ -529,6 +537,10 @@ module re2often
             real(c_double), intent(out) :: lappr(0:nm%bps*size(x_i)-1)
             !! LAPPR array associated with the transmitted sybmols
         end subroutine noisemapper_convert_symbol_to_hard_lappr
+        module subroutine noisemapper_deallocate_soft_reverse(nm)
+            !! Deallocate monotonicity configuration and Fy grid
+            class(noisemapper_type), intent(inout) :: nm
+        end subroutine noisemapper_deallocate_soft_reverse
     end interface
 
 

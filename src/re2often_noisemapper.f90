@@ -25,6 +25,14 @@ submodule (re2often) re2often_noisemapper
     implicit none
 
 contains
+    module subroutine noisemapper_finalize(nm)
+        !! Wrapper for the deallocate function
+        type(noisemapper_type) :: nm
+        !! Noisemapper
+
+        call nm%deallocate
+    end subroutine noisemapper_finalize
+
     module subroutine noisemapper_deallocate(nm)
         !! Destructor for noise mapper
         class(noisemapper_type), intent(inout) :: nm
@@ -33,6 +41,10 @@ contains
         if (allocated(nm%constellation)) deallocate(nm%constellation)
         if (allocated(nm%probabilities)) deallocate(nm%probabilities)
         if (allocated(nm%s_to_b       )) deallocate(nm%s_to_b       )
+
+        call nm%deallocate_reverse_hard
+        call nm%deallocate_reverse_soft
+        call nm%deallocate_reverse_common
     end subroutine noisemapper_deallocate
 
 
