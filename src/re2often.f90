@@ -145,7 +145,7 @@ module re2often
         ! +----------------------------------------------+
         ! | Reverse reconciliation with soft information |
         ! +----------------------------------------------+
-        procedure, pass :: deallocate_reverse_soft => noisemapper_deallocate_soft_reverse
+        procedure, pass :: deallocate_reverse_soft => noisemapper_deallocate_reverse_soft
         !! Deallocate monotonicity configuration and Fy grid
         procedure, pass :: generate_soft_metric => noisemapper_generate_soft_metric_single, &
             noisemapper_generate_soft_metric_array
@@ -537,10 +537,10 @@ module re2often
             real(c_double), intent(out) :: lappr(0:nm%bps*size(x_i)-1)
             !! LAPPR array associated with the transmitted sybmols
         end subroutine noisemapper_convert_symbol_to_hard_lappr
-        module subroutine noisemapper_deallocate_soft_reverse(nm)
+        module subroutine noisemapper_deallocate_reverse_soft(nm)
             !! Deallocate monotonicity configuration and Fy grid
             class(noisemapper_type), intent(inout) :: nm
-        end subroutine noisemapper_deallocate_soft_reverse
+        end subroutine noisemapper_deallocate_reverse_soft
     end interface
 
 
