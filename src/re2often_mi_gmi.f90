@@ -559,4 +559,74 @@ contains
         end function f_integrand
     end function I_s_ml_soft_reverse
 
+
+    module function I_s_ml_soft_direct(nm, s) result(I_s)
+        !! Compute the GMI-ML for the direct channel in case of generic probability
+        class(noisemapper_type),  intent(in) :: nm
+        real(c_double), optional, intent(in) :: s
+        real(c_double)                       :: I_s
+
+        real(c_double) :: s_local, sqrtN0
+        real(c_double) :: P_Bl(0:nm%bps-1, 0:1), logP_Bl(0:nm%bps-1, 0:1)
+
+        integer :: l, Ier
+
+        s_local = 1
+        if (present(s)) s_local = s
+
+        do l = 0, nm%bps-1
+            P_Bl(l, 1) = sum(nm%probabilities, mask=nm%s_to_b(:,l))
+        end do
+        P_Bl(:,0) = 1 - P_Bl(:, 1)
+        logP_Bl = log0(P_Bl)
+
+        sqrtN0 = sqrt(nm%N0)
+
+        I_s = hermite(20, f_gh, Ier) / (sqrtPi * ln2)
+    contains
+        real(c_double) function f_gh(u) result(f)
+            real(c_double), intent(in) :: u
+
+            integer :: x, xhat, l
+            real(c_double) :: y, tmp_f
+            real(c_double) :: P_Y_joint_Bl(0:nm%bps-1,0:1)
+
+            f = 0
+            do x = 0, nm%M-1
+                y = nm%constellation(x) + sqrtN0 * u
+
+                ! === Prepare metric numerator buffers ===
+                P_Y_joint_Bl = 0
+                do l = 0, nm%bps-1
+                    do xhat = 0, nm%M-1
+                        if (nm%s_to_b(xhat, l)) then
+                            P_Y_joint_Bl(l, 1) = P_Y_joint_Bl(l, 1) + &
+                                nm%probabilities(xhat) * exp(-(y-nm%constellation(xhat))**2/nm%N0)
+                        else
+                            P_Y_joint_Bl(l, 0) = P_Y_joint_Bl(l, 0) + &
+                                nm%probabilities(xhat) * exp(-(y-nm%constellation(xhat))**2/nm%N0)
+                        end if
+                    end do
+                end do
+
+                ! === Compute second term of the GH integrand function ===
+                tmp_f = 0
+                do xhat = 0, nm%M-1
+                    tmp_f = tmp_f + nm%probabilities(xhat) * ( &
+                        product(merge(P_Y_joint_Bl(:,1), P_Y_joint_Bl(:,0), nm%s_to_b(xhat, :))) / &
+                        product(merge(P_Bl(:,1),         P_Bl(:,0),         nm%s_to_b(xhat, :))) &
+                        ) ** s_local
+                end do
+                tmp_f = - log0(tmp_f)
+
+                ! === Compute first term of the GH integrand function ===
+                tmp_f = tmp_f + s_local * sum( log0(&
+                    merge(P_Y_joint_Bl(:,1), P_Y_joint_Bl(:,0), mask=nm%s_to_b(x,:))) - &
+                    merge(logP_Bl(:,1),      logP_Bl(:,0),      mask=nm%s_to_b(x,:)))
+
+                ! === Wrap up the integrand ===
+                f = f + nm%probabilities(x) * tmp_f
+            end do
+        end function f_gh
+    end function I_s_ml_soft_direct
 end submodule re2often_mi_gmi

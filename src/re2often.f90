@@ -196,6 +196,7 @@ module re2often
         !! Mutual information of the soft reverse reconciliation scheme
         !! with thresholds yielding uniform output symbol probability
 
+        procedure, pass :: I_s_ml_soft_direct
         procedure, pass :: I_s_ml_hard_direct
         procedure, pass :: I_s_ml_soft_reverse
         procedure, pass :: I_s_map_soft_reverse
@@ -656,5 +657,11 @@ module re2often
             logical       , intent(in), optional :: useDenominator
             real(c_double)                       :: I_s
         end function I_s_map_soft_reverse
+        module function I_s_ml_soft_direct(nm, s) result(I_s)
+            !! Compute the GMI-ML for the direct channel in case of generic probability
+            class(noisemapper_type),  intent(in) :: nm
+            real(c_double), optional, intent(in) :: s
+            real(c_double)                       :: I_s
+        end function I_s_ml_soft_direct
     end interface
 end module re2often
