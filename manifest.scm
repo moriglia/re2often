@@ -1,4 +1,6 @@
-(use-modules (guix-science packages fortran))
+(use-modules (guix-science packages fortran)
+             (gnu packages commencement))
 
 (packages->manifest
- (list fortran-fpm))
+ (list fortran-fpm
+       gfortran-toolchain))
