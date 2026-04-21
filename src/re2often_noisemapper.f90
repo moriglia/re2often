@@ -45,6 +45,8 @@ contains
         call nm%deallocate_reverse_hard
         call nm%deallocate_reverse_soft
         call nm%deallocate_reverse_common
+
+        if (allocated(nm%alice_bit_priors)) deallocate(nm%alice_bit_priors)
     end subroutine noisemapper_deallocate
 
 
@@ -68,6 +70,8 @@ contains
             nm%probabilities = probabilities
         end if
         nm%E_s = sum(nm%probabilities * abs(nm%constellation)**2)
+
+        call nm%update_alice_priors
     end subroutine noisemapper_set_symbol_probabilities
 
 
@@ -108,6 +112,8 @@ contains
                 nm%s_to_b(i, k) = iand(ishft(ishft(i, -k)+1, -1), 1)==1
             end do
         end do
+
+        call nm%update_alice_priors
     end subroutine noisemapper_set_encoding_gray
 
 
@@ -122,6 +128,8 @@ contains
                 nm%s_to_b(i, k) = iand(ishft(i, -k), 1)==1
             end do
         end do
+
+        call nm%update_alice_priors
     end subroutine noisemapper_set_encoding_natural
 
 
@@ -139,6 +147,8 @@ contains
                 nm%s_to_b(i, k) = iand(ishft(labels(i), -k), 1)==1
             end do
         end do
+
+        call nm%update_alice_priors
     end subroutine noisemapper_set_encoding_custom
 
 
@@ -205,9 +215,72 @@ contains
         integer :: j
 
         do j = 0, size(y)-1
-            call nm%y_to_lappr(y(j), lappr(j*nm%bps : (j+1)*nm%bps - 1))
+            call noisemapper_y_to_lappr_single(nm, y(j), lappr(j*nm%bps : (j+1)*nm%bps - 1))
         end do
     end subroutine noisemapper_y_to_lappr_array
+
+
+    module subroutine noisemapper_update_alice_priors(nm)
+        !! Update a priori probabilities for Alice
+        !! This function returns with no error nor warning
+        !! if either the encoding or the probabilities aren't set
+        class(noisemapper_type), intent(inout) :: nm
+        !! Noisemapper
+
+        integer :: l
+        real(c_double) :: denominator
+
+        if (.not. allocated(nm%s_to_b))        return
+        if (.not. allocated(nm%probabilities)) return
+
+        if (allocated(nm%alice_bit_priors)) deallocate(nm%alice_bit_priors)
+        allocate(nm%alice_bit_priors(0:nm%bps-1))
+
+        do l = 0, nm%bps-1
+            denominator = sum(merge(nm%probabilities, 0d0, nm%s_to_b(:,l)))
+            if (denominator .le. 0) then
+                nm%alice_bit_priors(l) = 1d100
+                cycle
+            end if
+            nm%alice_bit_priors(l) = 1 - denominator
+            if (nm%alice_bit_priors(l) .le. 0) then
+                nm%alice_bit_priors(l) = -1d100
+                cycle
+            end if
+            nm%alice_bit_priors(l) = log(nm%alice_bit_priors(l)) - log(denominator)
+        end do
+    end subroutine noisemapper_update_alice_priors
+
+
+    module subroutine noisemapper_y_to_llr_single(nm, y, llr)
+        !! Calculate LLR from the channel output
+        class(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: y
+        !! AWGN channel output sample
+        real(c_double), intent(out) :: llr(0:nm%bps-1)
+        !! log-likelyhood ratios of the bits associated to one single symbol transmission
+
+        call noisemapper_y_to_lappr_single(nm, y, llr)
+        llr = llr - nm%alice_bit_priors
+    end subroutine noisemapper_y_to_llr_single
+
+
+    module subroutine noisemapper_y_to_llr_array(nm, y, llr)
+        !! calculate lappr from set of channel output samples for direct reconciliation
+        class(noisemapper_type), intent(in) :: nm
+        !! Noise mapper
+        real(c_double), intent(in) :: y(0:)
+        !! AWGN channel samples
+        real(c_double), intent(out) :: llr(0:size(y)*nm%bps-1)
+        !! LAPPR corresponding to the channel outputs
+
+        integer :: j
+
+        do j = 0, size(y)-1
+            call noisemapper_y_to_llr_single(nm, y(j), llr(j*nm%bps : (j+1)*nm%bps - 1))
+        end do
+    end subroutine noisemapper_y_to_llr_array
 
 
     module subroutine noisemapper_random_symbol_single(nm, x_i)
@@ -344,7 +417,7 @@ contains
     end subroutine noisemapper_set_y_thresholds
 
 
-    module function noisemapper_decide_symbol_single(nm, y) result(x_i)
+    impure elemental module function noisemapper_decide_symbol_single(nm, y) result(x_i)
         !! Take a decision for the received channel output based
         !! on the thresholds
         class(noisemapper_type), intent(in) :: nm
@@ -355,26 +428,25 @@ contains
         !! Alphabet index of the decided symbol
 
         x_i = binsearch(nm%y_thresholds, y)
-
     end function noisemapper_decide_symbol_single
 
 
-    module function noisemapper_decide_symbol_array(nm, y) result(x_i)
-        !! Take a decision for the set of received channel outputs
-        !! based on thresholds
-        class(noisemapper_type), intent(in) :: nm
-        !! Noisemapper
-        real(c_double), intent(in) :: y(:)
-        !! Set of input samples
-        integer(c_int) :: x_i(size(y))
-        !! Decisions
+    ! module function noisemapper_decide_symbol_array(nm, y) result(x_i)
+    !     !! Take a decision for the set of received channel outputs
+    !     !! based on thresholds
+    !     class(noisemapper_type), intent(in) :: nm
+    !     !! Noisemapper
+    !     real(c_double), intent(in) :: y(:)
+    !     !! Set of input samples
+    !     integer(c_int) :: x_i(size(y))
+    !     !! Decisions
 
-        integer :: i
+    !     integer :: i
 
-        do i = 1, size(y)
-            x_i(i) = binsearch(nm%y_thresholds, y(i))
-        end do
-    end function noisemapper_decide_symbol_array
+    !     do i = 1, size(y)
+    !         x_i(i) = binsearch(nm%y_thresholds, y(i))
+    !     end do
+    ! end function noisemapper_decide_symbol_array
 
     ! +---------------------------------------+
     ! | Hard reverse reconciliation functions |
@@ -569,7 +641,7 @@ contains
 
 
 
-    module subroutine noisemapper_generate_soft_metric_single(nm, y, n, xhat)
+    impure elemental module subroutine noisemapper_generate_soft_metric_single(nm, y, n, xhat)
         !! Generate soft metric from a single channel output sample
         !! and give the decided symbol, too.
         class(noisemapper_type), intent(in) :: nm
@@ -786,11 +858,11 @@ contains
 
         if (present(res)) then
             do i = 0, size(x_i)-1
-                call nm%soft_reverse_lappr(x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1), res)
+                call noisemapper_soft_reverse_lappr(nm, x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1), res)
             end do
         else
             do i = 0, size(x_i)-1
-                call nm%soft_reverse_lappr(x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1))
+                call noisemapper_soft_reverse_lappr(nm, x_i(i), n(i), lappr(i*nm%bps : (i+1)*nm%bps-1))
             end do
         end if
     end subroutine noisemapper_soft_reverse_lappr_array

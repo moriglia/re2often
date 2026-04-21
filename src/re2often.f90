@@ -40,6 +40,9 @@ module re2often
         real(c_double) :: sigma
         !! standard deviation of noise (only one quadrature)
 
+        real(c_double), allocatable :: alice_bit_priors(:)
+        !! Log a priori probabilities of each bit
+
         ! +-----------------------------+
         ! | Reverse reconciliation data |
         ! +-----------------------------+
@@ -91,13 +94,23 @@ module re2often
         !! Deallocate basic arrays
         procedure, pass :: set_symbol_probabilities => noisemapper_set_symbol_probabilities
         !! Set symbol probabilities
-        procedure, pass :: random_symbol => noisemapper_random_symbol_single, noisemapper_random_symbol_array
+        procedure, pass :: noisemapper_random_symbol_single
+        procedure, pass :: noisemapper_random_symbol_array
+        generic         :: random_symbol => noisemapper_random_symbol_single, noisemapper_random_symbol_array
         !! Generate random symbols
         procedure, pass :: symbol_index_to_value => noisemapper_symbol_index_to_value
         !! Convert symbol index to constellation value
-        procedure, pass :: y_to_lappr    => noisemapper_y_to_lappr_single, noisemapper_y_to_lappr_array
+        procedure, pass :: noisemapper_y_to_lappr_single
+        procedure, pass :: noisemapper_y_to_lappr_array
+        generic         :: y_to_lappr => noisemapper_y_to_lappr_array, noisemapper_y_to_lappr_single
         !! Compute the LAPPR for direct reconciliation (Bob is to guess Alice's tx sequence)
-        procedure, pass :: decide_symbol => noisemapper_decide_symbol_single, noisemapper_decide_symbol_array
+        procedure, pass :: noisemapper_y_to_llr_single
+        procedure, pass :: noisemapper_y_to_llr_array
+        generic         :: y_to_llr => noisemapper_y_to_llr_array, noisemapper_y_to_llr_single
+        !! Compute the LLR for direct reconciliation
+        procedure, pass :: update_alice_priors => noisemapper_update_alice_priors
+        !! Update prior log-ratios on Alice's bits for direct reconciliation
+        procedure, pass :: decide_symbol => noisemapper_decide_symbol_single
         !! Take a decision on a channel output (Bob's side)
         procedure, pass :: update_N0_from_snrdb => noisemapper_update_N0_from_snrdb
         !! Use SNR (dB) to update the value of the noise spectral density (N_0/2 on each quadrature)
@@ -152,7 +165,9 @@ module re2often
         !! Use the channel output (Bob's side) to generate the soft metric.
         !! At the same time, this function also provides a discretized version
         !! of the channel output
-        procedure, pass :: soft_reverse_lappr => noisemapper_soft_reverse_lappr_single, &
+        procedure, pass :: noisemapper_soft_reverse_lappr_single
+        procedure, pass :: noisemapper_soft_reverse_lappr_array
+        generic         :: soft_reverse_lappr => noisemapper_soft_reverse_lappr_single, &
             noisemapper_soft_reverse_lappr_array
         !! Compute the LAPPRs (Alice's side) from the channel inputs,
         !! and the soft metric provided by Bob.
@@ -253,7 +268,7 @@ module re2often
         end subroutine noisemapper_y_to_lappr_array
     end interface noisemapper_y_to_lappr
 
-    interface noisemapper_random_symbol
+    interface
         module subroutine noisemapper_random_symbol_single(nm, x_i)
             !! Generate a random symbol
             class(noisemapper_type), intent(in) :: nm
@@ -268,7 +283,35 @@ module re2often
             integer(c_int), intent(out) :: x_i(:)
             !! Random symbols of the constellation (index in 0:M-1)
         end subroutine noisemapper_random_symbol_array
-    end interface noisemapper_random_symbol
+    end interface
+
+    interface
+        module subroutine noisemapper_y_to_llr_single(nm, y, llr)
+            !! Calculate LLR from the channel output
+            class(noisemapper_type), intent(in) :: nm
+            !! Noise mapper
+            real(c_double), intent(in) :: y
+            !! AWGN channel output sample
+            real(c_double), intent(out) :: llr(0:nm%bps-1)
+            !! log-likelyhood ratios of the bits associated to one single symbol transmission
+        end subroutine noisemapper_y_to_llr_single
+        module subroutine noisemapper_y_to_llr_array(nm, y, llr)
+            !! Calculate LLR from the channel output for a set of channel output samples
+            class(noisemapper_type), intent(in) :: nm
+            !! Noise mapper
+            real(c_double), intent(in) :: y(0:)
+            !! AWGN channel output sample
+            real(c_double), intent(out) :: llr(0:nm%bps*sizeof(y)-1)
+            !! log-likelyhood ratios of the bits associated to one single symbol transmission
+        end subroutine noisemapper_y_to_llr_array
+        module subroutine noisemapper_update_alice_priors(nm)
+            !! Update a priori probabilities for Alice
+            !! This function returns with no error nor warning
+            !! if either the encoding or the probabilities aren't set
+            class(noisemapper_type), intent(inout) :: nm
+            !! Noisemapper
+        end subroutine noisemapper_update_alice_priors
+    end interface
 
     ! +---------------------------------------+
     ! | Interfaces for REVERSE reconciliation |
@@ -286,7 +329,7 @@ module re2often
         end subroutine noisemapper_deallocate_reverse_common
     end interface
     interface noisemapper_decide_symbol
-        module function noisemapper_decide_symbol_single(nm, y) result(x_i)
+        impure elemental module function noisemapper_decide_symbol_single(nm, y) result(x_i)
             !! Take a decision for the received channel output based
             !! on the thresholds
             class(noisemapper_type), intent(in) :: nm
@@ -296,23 +339,23 @@ module re2often
             integer(c_int) :: x_i
             !! Alphabet index of the decided symbol
         end function noisemapper_decide_symbol_single
-        module function noisemapper_decide_symbol_array(nm, y) result(x_i)
-            !! Take a decision for the set of received channel outputs
-            !! based on thresholds
-            class(noisemapper_type), intent(in) :: nm
-            !! Noisemapper
-            real(c_double), intent(in) :: y(:)
-            !! Set of input samples
-            integer(c_int) :: x_i(size(y))
-            !! Decisions
-        end function noisemapper_decide_symbol_array
+        ! module function noisemapper_decide_symbol_array(nm, y) result(x_i)
+        !     !! Take a decision for the set of received channel outputs
+        !     !! based on thresholds
+        !     class(noisemapper_type), intent(in) :: nm
+        !     !! Noisemapper
+        !     real(c_double), intent(in) :: y(:)
+        !     !! Set of input samples
+        !     integer(c_int) :: x_i(size(y))
+        !     !! Decisions
+        ! end function noisemapper_decide_symbol_array
     end interface noisemapper_decide_symbol
 
     ! +--------------------------------------------+
     ! | Interfaces for SOFT REVERSE reconciliation |
     ! +--------------------------------------------+
     interface noisemapper_generate_soft_metric
-        module subroutine noisemapper_generate_soft_metric_single(nm, y, n, xhat)
+        impure elemental module subroutine noisemapper_generate_soft_metric_single(nm, y, n, xhat)
             !! Generate soft metric from a single channel output sample
             !! and give the decided symbol, too.
             class(noisemapper_type), intent(in) :: nm
