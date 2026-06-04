@@ -133,9 +133,9 @@ contains
         !! maximum number of LDPC iterations
         integer, intent(in) :: min_ferr
         !! Number of frame errors to stop the simulation earlier
-        character(len=250), intent(out) :: output_dir
+        character(len=*), intent(out) :: output_dir
         !! Output dir
-        character(len=250), intent(out) :: output_file
+        character(len=*), intent(out) :: output_file
         !! Output file
         double precision, optional, intent(in) :: alpha
         !! Scaling coefficient for the LAPPR

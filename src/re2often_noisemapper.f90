@@ -89,10 +89,11 @@ contains
 
         nm%bps = bps
         nm%M   = ishft(1, bps)
+        nm%M_half = ishft(nm%M, -1)
 
         allocate(nm%constellation(0:nm%M-1))
-        nm%constellation = [(real(1-nm%M, c_double) + real(2*i, c_double), &
-            i = 0, nm%M-1) ]
+        nm%constellation = [(real(1-nm%M + 2*i, c_double)/2d0, &
+            i = 0, nm%M-1) ] ! divided by 2 so that the spacing is 1
 
         call nm%set_symbol_probabilities()
 

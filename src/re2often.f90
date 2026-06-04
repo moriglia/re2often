@@ -27,6 +27,8 @@ module re2often
         !! Bit per symbol
         integer(c_int) :: M
         !! order of modulation (number of constellation symbols)
+        integer(c_int) :: M_half
+        !! Half of the order of the modulation
         real(c_double), allocatable :: constellation(:)
         !! constellation points
         real(c_double), allocatable :: probabilities(:)
